@@ -57,6 +57,7 @@ function App() {
       }
       setCameraEnabled(true);
     } catch (error) {
+      console.error(error);
       alert('Cannot access Camera');
     }
   }
@@ -66,6 +67,7 @@ function App() {
       await document.documentElement.requestFullscreen();
       setFullScreen(true);
     } catch (error) {
+      console.error(error);
       alert('Cannot access full screen');
     }
   }
@@ -126,9 +128,9 @@ function App() {
           disabled={!cameraEnabled || !fullScreen}
           onClick={async () => {
             try {
-              const response = await window.athena.startTimerOnMain();
+              await window.athena.startTimerOnMain();
             } catch (error) {
-
+              console.error(error);
             }
           }}
         >

@@ -1,4 +1,4 @@
-// preload.js
+// eslint-disable-next-line no-undef
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld("athena", {
@@ -15,11 +15,7 @@ contextBridge.exposeInMainWorld("athena", {
         }
     },
     startTimerOnMain: () => {
-        try {
-            return ipcRenderer.invoke('start-timer');
-        } catch (error) {
-            throw "error";
-        }
+        return ipcRenderer.invoke('start-timer');
     },
 
     // New Preload Functions
