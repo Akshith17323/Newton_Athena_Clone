@@ -1,5 +1,6 @@
 // App.jsx
 import { useEffect, useRef, useState } from 'react'
+import Quiz from './components/Quiz/Quiz'
 import './App.css'
 
 function App() {
@@ -7,10 +8,52 @@ function App() {
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [fullScreen, setFullScreen] = useState(false);
   const [timer, setTimer] = useState('');
-
+  const [sessionId, setSessionId] = useState(null);
+  const [quizStarted, setQuizStarted] = useState(false);
+  const [restoredAnswers, setRestoredAnswers] = useState({});
+  const [examResults, setExamResults] = useState(null);
   // ref variables
   const videoRef = useRef(null);
+  const streamRef = useRef(null);
 
+  // Keep video stream alive across re-renders
+  useEffect(() => {
+    if (videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+    }
+  }, [quizStarted]);
+
+  // Restore session on load
+  useEffect(() => {
+    const storedSessionId = localStorage.getItem('athena_sessionId');
+    if (storedSessionId) {
+      fetch(`/exam/session/${storedSessionId}`)
+        .then(res => {
+          if (!res.ok) throw new Error("Session not found");
+          return res.json();
+        })
+        .then(data => {
+          if (data.status === "in-progress") {
+            setSessionId(storedSessionId);
+            const newAnswers = {};
+            data.answers.forEach(ans => {
+              newAnswers[ans.questionId] = ans.selectedAnswer;
+            });
+            setRestoredAnswers(newAnswers);
+          } else if (data.status === "submitted") {
+            setExamResults({
+              attempted: data.attempted,
+              correct: data.correct,
+              wrong: data.wrong
+            });
+          }
+        })
+        .catch(err => {
+          console.error("Failed to restore session:", err);
+          localStorage.removeItem('athena_sessionId');
+        });
+    }
+  }, []);
 
   useEffect(() => {
     // Register Listener for handling Timer Tick from Main
@@ -24,6 +67,19 @@ function App() {
       removeCameraSnapListener()
     };
   }, []);
+
+  // Save screenshots every 5 seconds when camera is enabled
+  useEffect(() => {
+    let intervalId;
+    if (cameraEnabled) {
+      intervalId = setInterval(() => {
+        saveVideoScreenShots();
+      }, 5000);
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [cameraEnabled]);
 
   async function saveVideoScreenShots() {
     if (!videoRef.current || !videoRef.current.srcObject) {
@@ -40,7 +96,7 @@ function App() {
       const arrayBuffer = await blob.arrayBuffer();
 
       // Send raw binary buffer to main process
-      window.athena.storeCameraSnapImageOnDisk(arrayBuffer);
+      window.athena.storeCameraSnapImageOnDisk(arrayBuffer, sessionId);
     } catch (error) {
       console.error("Failed to capture image via ImageCapture:", error);
     }
@@ -52,8 +108,9 @@ function App() {
         video: true
       });
 
+      streamRef.current = videoData;
       if (videoRef.current) {
-        videoRef.current.srcObject = videoData
+        videoRef.current.srcObject = videoData;
       }
       setCameraEnabled(true);
     } catch (error) {
@@ -72,6 +129,75 @@ function App() {
     }
   }
 
+  async function startExamOnBackend() {
+    try {
+      const response = await fetch('/exam/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userId: "user-123", // Replace with real user input later
+          name: "Test User"
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        console.log("Exam started with Session ID:", data.sessionId);
+        setSessionId(data.sessionId);
+        setQuizStarted(true);
+        localStorage.setItem('athena_sessionId', data.sessionId);
+      } else {
+        console.error("Failed to start exam:", data.message);
+      }
+    } catch (error) {
+      console.error("Network error:", error);
+    }
+  }
+
+  if (examResults) {
+    return (
+      <div className="page-container">
+        <div className="card-container" style={{ textAlign: 'center' }}>
+          <h2>Exam Results</h2>
+          <div style={{ marginTop: '20px', fontSize: '18px' }}>
+            <p>Attempted: <strong>{examResults.attempted}</strong></p>
+            <p style={{ color: '#16a34a' }}>Correct: <strong>{examResults.correct}</strong></p>
+            <p style={{ color: '#dc2626' }}>Wrong: <strong>{examResults.wrong}</strong></p>
+          </div>
+          <button className="btn btn-primary" style={{ marginTop: '32px' }} onClick={() => {
+            setExamResults(null);
+            setSessionId(null);
+            setRestoredAnswers({});
+            localStorage.removeItem('athena_sessionId');
+          }}>Start New Exam</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (quizStarted) {
+    return (
+      <div style={{ position: 'relative' }}>
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          style={{ position: 'fixed', bottom: '20px', right: '20px', width: '150px', borderRadius: '8px', zIndex: 1000, boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
+        />
+        <Quiz 
+          key={sessionId}
+          sessionId={sessionId} 
+          timer={timer} 
+          restoredAnswers={restoredAnswers} 
+          onFinish={(results) => {
+            setExamResults(results);
+            setQuizStarted(false);
+          }} 
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="page-container">
@@ -128,13 +254,19 @@ function App() {
           disabled={!cameraEnabled || !fullScreen}
           onClick={async () => {
             try {
-              await window.athena.startTimerOnMain();
+              if (sessionId) {
+                setQuizStarted(true);
+                await window.athena.startTimerOnMain();
+              } else {
+                await startExamOnBackend();
+                await window.athena.startTimerOnMain();
+              }
             } catch (error) {
               console.error(error);
             }
           }}
         >
-          Go To Test
+          {sessionId ? "Resume Test" : "Go To Test"}
         </button>
       </div>
 
@@ -142,29 +274,24 @@ function App() {
         {timer + ' (s) elapsed'}
       </div>
 
-      <div>
-        <button onClick={() => {
+      <div style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap' }}>
+        <button className="btn btn-outline" onClick={() => {
           saveVideoScreenShots()
         }}>
-          saveVideoScreenShots
+          Capture Snapshot
         </button>
-      </div>
 
-
-      <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-        <button onClick={() => {
+        <button className="btn btn-outline" onClick={() => {
           window.athena.showRules()
         }}>
           Show Native Rules
         </button>
 
-        <button onClick={() => { alert("Rules ...") }}>
+        <button className="btn btn-outline" onClick={() => { alert("Rules ...") }}>
           Show Chromium Rules
         </button>
-      </div>
 
-      <div>
-        <button onClick={() => {
+        <button className="btn btn-outline" onClick={() => {
           window.athena.selectFolder()
         }}>
           Select folder

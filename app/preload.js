@@ -1,4 +1,3 @@
-// eslint-disable-next-line no-undef
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld("athena", {
@@ -29,8 +28,8 @@ contextBridge.exposeInMainWorld("athena", {
         }
     },
 
-    storeCameraSnapImageOnDisk: (data) => {
-        ipcRenderer.invoke('store-camera-snap-image-on-disk', data);
+    storeCameraSnapImageOnDisk: (data, sessionId) => {
+        ipcRenderer.invoke('store-camera-snap-image-on-disk', data, sessionId);
     },
 
     // Functions related to showing Contest Rules in a new Dialog

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Notification } from "electron";
+import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import path from "path";
 import fs from "fs";
 
@@ -22,7 +22,7 @@ function createWindow() {
     electronWindow.loadURL('http://localhost:5173')
 }
 
-ipcMain.handle('start-timer', (event) => {
+ipcMain.handle('start-timer', () => {
     startTimestamp = Date.now();
 
     // Send Timer Tick every 1s
@@ -37,12 +37,22 @@ ipcMain.handle('start-timer', (event) => {
 })
 
 
-ipcMain.handle('store-camera-snap-image-on-disk', (_event, data) => {
-    const filePath = path.join(import.meta.dirname, "user-camera-snap", `${Date.now()}.jpg`);
+ipcMain.handle('store-camera-snap-image-on-disk', (_event, data, sessionId) => {
+    let baseDir = path.join(import.meta.dirname, "user-camera-snap");
 
     if (cameraShotPath) {
-        filePath = cameraShotPath
+        baseDir = cameraShotPath;
     }
+
+    const sessionDir = sessionId ? path.join(baseDir, sessionId) : path.join(baseDir, "pre-exam-snaps");
+
+    // Ensure the directory exists
+    if (!fs.existsSync(sessionDir)) {
+        fs.mkdirSync(sessionDir, { recursive: true });
+    }
+
+    const filePath = path.join(sessionDir, `${Date.now()}.jpg`);
+
     fs.writeFileSync(filePath, Buffer.from(data));
 })
 
@@ -77,7 +87,6 @@ async function showMessageBox() {
         checkboxLabel: "Your are Ok with above guidelines"
     })
 
-    const { response, checkboxChecked } = data;
     console.log(data);
     // response -> contains the index of the button
     // checkboxChecked -> contains user clicks the button
@@ -99,7 +108,6 @@ async function selectFile() {
     })
 
     // check what does response have
-    const { filePaths, canceled } = response;
     console.log(response);
 }
 
@@ -111,6 +119,9 @@ async function selectFolder() {
         defaultPath: '/'
     });
 
+    if (!response.canceled && response.filePaths.length > 0) {
+        cameraShotPath = response.filePaths[0];
+    }
     console.log(response);
 }
 
