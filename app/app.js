@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, desktopCapturer, session, screen } from "electron";
 import path from "path";
 import fs from "fs";
 
@@ -57,6 +57,41 @@ ipcMain.handle('store-camera-snap-image-on-disk', (_event, data, sessionId) => {
 })
 
 
+ipcMain.handle('capture-screen', async (_event, sessionId) => {
+    try {
+        const primaryDisplay = screen.getPrimaryDisplay();
+        const { width, height } = primaryDisplay.size;
+        const scaleFactor = primaryDisplay.scaleFactor;
+        
+        const sources = await desktopCapturer.getSources({ 
+            types: ['window', 'screen'], 
+            thumbnailSize: { 
+                width: width * scaleFactor, 
+                height: height * scaleFactor 
+            } 
+        });
+        const primaryScreen = sources[0];
+        const pngBuffer = primaryScreen.thumbnail.toPNG();
+
+        let baseDir = path.join(import.meta.dirname, "user-screen-snap");
+        if (cameraShotPath) {
+            baseDir = cameraShotPath;
+        }
+
+        const sessionDir = sessionId ? path.join(baseDir, sessionId + "-screen") : path.join(baseDir, "pre-exam-screen-snaps");
+
+        if (!fs.existsSync(sessionDir)) {
+            fs.mkdirSync(sessionDir, { recursive: true });
+        }
+
+        const filePath = path.join(sessionDir, `${Date.now()}_screen.png`);
+        fs.writeFileSync(filePath, pngBuffer);
+        return filePath;
+    } catch (error) {
+        console.error("Failed to capture screen:", error);
+    }
+})
+
 ipcMain.on("show-rules", () => {
     dialog.showMessageBox(electronWindow, {
         type: "info",
@@ -73,6 +108,15 @@ ipcMain.on("show-rules", () => {
 
 
 app.whenReady().then(() => {
+    session.defaultSession.setDisplayMediaRequestHandler(
+        (request, callback) => {
+            desktopCapturer.getSources({ types: ['window', 'screen'] }).then((sources) => {
+                // Grant access to the first screen found.
+                callback({ video: sources[0], audio: 'loopback' })
+            })
+        },
+        { useSystemPicker: true }
+    );
     createWindow();
 });
 
@@ -121,8 +165,10 @@ async function selectFolder() {
 
     if (!response.canceled && response.filePaths.length > 0) {
         cameraShotPath = response.filePaths[0];
+        return response.filePaths[0];
     }
     console.log(response);
+    return null;
 }
 
 ipcMain.handle("selectFile", async () => {
@@ -131,7 +177,7 @@ ipcMain.handle("selectFile", async () => {
 
 
 ipcMain.handle("selectFolder", async () => {
-    await selectFolder();
+    return await selectFolder();
 })
 
 

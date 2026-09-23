@@ -1,0 +1,30 @@
+form now on add the prompots ot thea newly created file names Chats/prompts.txt in the root
+// main.js
+const { app, BrowserWindow, desktopCapturer, session } = require('electron')
+
+app.whenReady().then(() => {
+  const mainWindow = new BrowserWindow()
+
+  session.defaultSession.setDisplayMediaRequestHandler(
+    (request, callback) => {
+      desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
+        // Grant access to the first screen found.
+        callback({ video: sources[0], audio: 'loopback' })
+      })
+      // If true, use the system picker if available.
+      // Note: this is currently experimental. If the system picker
+      // is available, it will be used and the media request handler
+      // will not be invoked.
+    },
+    { useSystemPicker: true }
+  )
+
+  mainWindow.loadFile('index.html')
+})
+
+this is the main code snippet for the desktop catureer in electron implement this function and also in teh landing page of the quiz ask of the screen share permissons before hand and selecting the folder of thte capture screen shots
+make it simple cdoe , and where is the function it sotre the screenshots in the selected folder
+wue the fucntion s like primanyscreen sources[0 annd png buffer primary screen ,thumbanil.buffer() and then use rth efile path to save th screen shot of the screen  and also s the button exists for screen share permissions before starting the test
+and for better resolution fix the resolution to the screen or for  the mac os
+or use the types windo wof rthe getSources
+@[/Users/akshith/Desktop/Athena-Clone/.DS_Store] add this to the git ginore

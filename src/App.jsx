@@ -6,6 +6,8 @@ import './App.css'
 function App() {
   // state variables
   const [cameraEnabled, setCameraEnabled] = useState(false);
+  const [screenShared, setScreenShared] = useState(false);
+  const [folderSelected, setFolderSelected] = useState(false);
   const [fullScreen, setFullScreen] = useState(false);
   const [timer, setTimer] = useState('');
   const [sessionId, setSessionId] = useState(null);
@@ -97,6 +99,9 @@ function App() {
 
       // Send raw binary buffer to main process
       window.athena.storeCameraSnapImageOnDisk(arrayBuffer, sessionId);
+
+      // Also capture the desktop screen natively
+      window.athena.captureScreen(sessionId);
     } catch (error) {
       console.error("Failed to capture image via ImageCapture:", error);
     }
@@ -116,6 +121,34 @@ function App() {
     } catch (error) {
       console.error(error);
       alert('Cannot access Camera');
+    }
+  }
+
+  async function getScreenAccess() {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: false
+      });
+      setScreenShared(true);
+      // Listen for stream stop to revoke permission state if user stops sharing
+      stream.getVideoTracks()[0].onended = () => {
+        setScreenShared(false);
+      };
+    } catch (error) {
+      console.error(error);
+      alert('Cannot access Screen Share');
+    }
+  }
+
+  async function handleSelectFolder() {
+    try {
+      const path = await window.athena.selectFolder();
+      if (path) {
+        setFolderSelected(true);
+      }
+    } catch (error) {
+      console.error(error);
     }
   }
 
@@ -230,7 +263,45 @@ function App() {
 
         <div className="divider"></div>
 
-        {/* Section 2: Fullscreen */}
+        {/* Section: Screen Share */}
+        <div className="permission-item">
+          <div className="permission-content">
+            <h3>Share Screen</h3>
+            <p>Kindly share your entire screen for monitoring.</p>
+            <div className="action-row">
+              <button
+                className="btn btn-black"
+                disabled={screenShared}
+                onClick={getScreenAccess}
+              >
+                {screenShared ? 'Screen Shared' : 'Share Screen'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="divider"></div>
+
+        {/* Section: Select Folder */}
+        <div className="permission-item">
+          <div className="permission-content">
+            <h3>Select Folder</h3>
+            <p>Select a folder to save captured screenshots.</p>
+            <div className="action-row">
+              <button
+                className="btn btn-black"
+                disabled={folderSelected}
+                onClick={handleSelectFolder}
+              >
+                {folderSelected ? 'Folder Selected' : 'Select Folder'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="divider"></div>
+
+        {/* Section: Fullscreen */}
         <div className="permission-item">
           <div className="permission-content">
             <h3>Switch to full screen</h3>
@@ -251,7 +322,7 @@ function App() {
       <div className="bottom-actions">
         <button
           className="btn btn-primary"
-          disabled={!cameraEnabled || !fullScreen}
+          disabled={!cameraEnabled || !fullScreen || !screenShared || !folderSelected}
           onClick={async () => {
             try {
               if (sessionId) {
@@ -289,12 +360,6 @@ function App() {
 
         <button className="btn btn-outline" onClick={() => { alert("Rules ...") }}>
           Show Chromium Rules
-        </button>
-
-        <button className="btn btn-outline" onClick={() => {
-          window.athena.selectFolder()
-        }}>
-          Select folder
         </button>
       </div>
 

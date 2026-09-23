@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld("athena", {
     storeCameraSnapImageOnDisk: (data, sessionId) => {
         ipcRenderer.invoke('store-camera-snap-image-on-disk', data, sessionId);
     },
+    captureScreen: (sessionId) => {
+        ipcRenderer.invoke('capture-screen', sessionId);
+    },
 
     // Functions related to showing Contest Rules in a new Dialog
     showRules: () => {
@@ -43,7 +46,7 @@ contextBridge.exposeInMainWorld("athena", {
         ipcRenderer.invoke("selectFile");
     },
     selectFolder() {
-        ipcRenderer.invoke("selectFolder")
+        return ipcRenderer.invoke("selectFolder")
     },
     showSaveDialogBox() {
         ipcRenderer.invoke("showSaveDialogBox");
