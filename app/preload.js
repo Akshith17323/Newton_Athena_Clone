@@ -18,6 +18,13 @@ contextBridge.exposeInMainWorld("athena", {
     },
 
     // New Preload Functions
+    registerListenerForKeyboardInputFromMain: (callback) => {
+        const fn = (event, message) => callback(message);
+        ipcRenderer.on('keyboard-input', fn);
+        return () => {
+            ipcRenderer.removeListener('keyboard-input', fn);
+        }
+    },
 
     // Functions related to capturing camera snaps of user
     registerListenerForCameraSnapFromMain: (callback) => {

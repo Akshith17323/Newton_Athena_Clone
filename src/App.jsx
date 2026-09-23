@@ -64,9 +64,15 @@ function App() {
     // Register Listener for handling Camera Snap Request from Main
     const removeCameraSnapListener = window.athena.registerListenerForCameraSnapFromMain(saveVideoScreenShots);
 
+    // Register Listener for Keyboard inputs
+    const removeKeyboardListener = window.athena.registerListenerForKeyboardInputFromMain((input) => {
+      console.log("Keyboard input intercepted from main:", input);
+    });
+
     return () => {
       removeTimerTickListener()
       removeCameraSnapListener()
+      removeKeyboardListener()
     };
   }, []);
 

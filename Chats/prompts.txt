@@ -28,3 +28,4 @@ wue the fucntion s like primanyscreen sources[0 annd png buffer primary screen ,
 and for better resolution fix the resolution to the screen or for  the mac os
 or use the types windo wof rthe getSources
 @[/Users/akshith/Desktop/Athena-Clone/.DS_Store] add this to the git ginore
+now use the window .webcontents to send the keyboard inputs to the renderer process and also console .log the window ,webcontents once

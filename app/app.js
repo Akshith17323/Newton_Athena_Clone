@@ -20,6 +20,12 @@ function createWindow() {
     })
 
     electronWindow.loadURL('http://localhost:5173')
+
+    console.log("WebContents:", electronWindow.webContents);
+
+    electronWindow.webContents.on('before-input-event', (event, input) => {
+        electronWindow.webContents.send('keyboard-input', input);
+    });
 }
 
 ipcMain.handle('start-timer', () => {
