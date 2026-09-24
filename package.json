@@ -3,14 +3,31 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "app/app.js",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview",
-    "electron": "electron ./app/app.js"
+    "start": "electron .",
+    "vite:build": "vite build",
+    "build": "npm run vite:build && electron-builder"
+  },
+  "build": {
+    "directories": {
+      "output": "release"
+    },
+    "appId": "app.athena",
+    "productName": "Athena",
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "public/icon.png"
+    }
   },
   "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
@@ -20,6 +37,7 @@
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "electron": "^44.3.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^10.10.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.6",

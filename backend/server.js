@@ -10,13 +10,14 @@ app.use(cors());
 app.use(express.json());
 
 const questionsPath = path.join(__dirname, "data", "questions.json");
-const sessionsPath = path.join(__dirname, "data", "sessions.json");
+const sessionsPath = process.env.SESSIONS_PATH || path.join(__dirname, "data", "sessions.json");
 
 function readQuestions() {
   return JSON.parse(fs.readFileSync(questionsPath, "utf-8"));
 }
 
 function readSessions() {
+  if (!fs.existsSync(sessionsPath)) return [];
   return JSON.parse(fs.readFileSync(sessionsPath, "utf-8"));
 }
 

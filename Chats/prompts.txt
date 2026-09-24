@@ -29,3 +29,7 @@ and for better resolution fix the resolution to the screen or for  the mac os
 or use the types windo wof rthe getSources
 @[/Users/akshith/Desktop/Athena-Clone/.DS_Store] add this to the git ginore
 now use the window .webcontents to send the keyboard inputs to the renderer process and also console .log the window ,webcontents once
+use event.prevent default to stop copy paste anything from outside the application 
+and other key bindings  whih make as cheating in ant online exam
+no like we should restirct all the key bindings like shortcuts
+also remind me next time to add frame false or those kind of actions

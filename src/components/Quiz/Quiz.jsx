@@ -6,7 +6,7 @@ export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
 
   // Fetch questions
   useEffect(() => {
-    fetch('/exam/mcq')
+    fetch('http://localhost:3000/exam/mcq')
       .then(res => res.json())
       .then(data => setQuestions(data))
       .catch(err => console.error("Failed to fetch questions:", err));
@@ -19,7 +19,7 @@ export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
     setAnswers(prev => ({ ...prev, [questionId]: selectedAnswerIndex }));
 
     try {
-      const res = await fetch('/exam/answer', {
+      const res = await fetch('http://localhost:3000/exam/answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -40,7 +40,7 @@ export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
 
   async function submitExamOnBackend() {
     try {
-      const res = await fetch('/exam/submit', {
+      const res = await fetch('http://localhost:3000/exam/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId })

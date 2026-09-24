@@ -1,10 +1,27 @@
-import { app, BrowserWindow, ipcMain, dialog, desktopCapturer, session, screen } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, desktopCapturer, session, screen, Menu } from "electron";
 import path from "path";
 import fs from "fs";
+import { fork } from "child_process";
 
 let electronWindow = null;
 let startTimestamp = null
 let cameraShotPath = null;
+let forceQuit = false;
+
+function attemptQuit() {
+    if (forceQuit) return;
+    dialog.showMessageBox(electronWindow, {
+        type: 'warning',
+        buttons: ['Yes', 'No'],
+        title: 'Confirm Quit',
+        message: 'Are you sure you want to quit the exam?'
+    }).then(res => {
+        if (res.response === 0) {
+            forceQuit = true;
+            app.quit();
+        }
+    });
+}
 
 function createWindow() {
     electronWindow = new BrowserWindow({
@@ -12,19 +29,42 @@ function createWindow() {
         width: 1000,
         fullscreen: true,
         kiosk: true,
+        frame: false,
+        autoHideMenuBar: true,
         webPreferences: {
-
+            webSecurity: false,
             devTools: true,
             preload: path.join(import.meta.dirname, 'preload.js')
         }
     })
 
-    electronWindow.loadURL('http://localhost:5173')
+    if (app.isPackaged) {
+        electronWindow.loadFile(path.join(import.meta.dirname, '../dist/index.html'));
+    } else {
+        electronWindow.loadURL('http://localhost:5173');
+    }
 
     console.log("WebContents:", electronWindow.webContents);
 
+    Menu.setApplicationMenu(null);
+
     electronWindow.webContents.on('before-input-event', (event, input) => {
         electronWindow.webContents.send('keyboard-input', input);
+        
+        // Prevent keybinds like copy/paste
+        if (input.control || input.meta) {
+            event.preventDefault();
+            if (input.key.toLowerCase() === 'q') {
+                attemptQuit();
+            }
+        }
+    });
+
+    electronWindow.on('close', (e) => {
+        if (!forceQuit) {
+            e.preventDefault();
+            attemptQuit();
+        }
     });
 }
 
@@ -72,8 +112,8 @@ ipcMain.handle('capture-screen', async (_event, sessionId) => {
         const sources = await desktopCapturer.getSources({ 
             types: ['window', 'screen'], 
             thumbnailSize: { 
-                width: width * scaleFactor, 
-                height: height * scaleFactor 
+                width: Math.floor(width * scaleFactor), 
+                height: Math.floor(height * scaleFactor) 
             } 
         });
         const primaryScreen = sources[0];
@@ -114,6 +154,16 @@ ipcMain.on("show-rules", () => {
 
 
 app.whenReady().then(() => {
+    const serverPath = path.join(import.meta.dirname, '../backend/server.js');
+    const sessionsPath = path.join(app.getPath('userData'), 'sessions.json');
+    const backendProcess = fork(serverPath, [], {
+        env: { ...process.env, SESSIONS_PATH: sessionsPath }
+    });
+
+    app.on('will-quit', () => {
+        if (backendProcess) backendProcess.kill();
+    });
+
     session.defaultSession.setDisplayMediaRequestHandler(
         (request, callback) => {
             desktopCapturer.getSources({ types: ['window', 'screen'] }).then((sources) => {

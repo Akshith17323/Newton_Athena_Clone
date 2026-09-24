@@ -29,7 +29,7 @@ function App() {
   useEffect(() => {
     const storedSessionId = localStorage.getItem('athena_sessionId');
     if (storedSessionId) {
-      fetch(`/exam/session/${storedSessionId}`)
+      fetch(`http://localhost:3000/exam/session/${storedSessionId}`)
         .then(res => {
           if (!res.ok) throw new Error("Session not found");
           return res.json();
@@ -170,7 +170,7 @@ function App() {
 
   async function startExamOnBackend() {
     try {
-      const response = await fetch('/exam/start', {
+      const response = await fetch('http://localhost:3000/exam/start', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -188,9 +188,11 @@ function App() {
         localStorage.setItem('athena_sessionId', data.sessionId);
       } else {
         console.error("Failed to start exam:", data.message);
+        alert("Failed to start exam: " + data.message);
       }
     } catch (error) {
       console.error("Network error:", error);
+      alert("Network error: " + error.message + " (Make sure the backend is running at localhost:3000!)");
     }
   }
 
