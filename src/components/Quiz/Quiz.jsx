@@ -4,6 +4,7 @@ export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState(restoredAnswers || {});
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fetch questions
   useEffect(() => {
@@ -14,7 +15,8 @@ export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
   }, []);
 
   async function handleAnswerSelect(questionId, selectedAnswerIndex) {
-    if (answers[questionId] !== undefined) return; // Prevent changing answer
+    // Save previous answer to revert in case of failure
+    const previousAnswer = answers[questionId];
     
     // Optimistically update UI
     setAnswers(prev => ({ ...prev, [questionId]: selectedAnswerIndex }));
@@ -33,13 +35,35 @@ export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
       if (!res.ok) {
         console.error("Failed to submit answer:", data.message);
         alert(data.message);
+        // Revert on API error
+        setAnswers(prev => {
+          const newAnswers = { ...prev };
+          if (previousAnswer === undefined) {
+            delete newAnswers[questionId];
+          } else {
+            newAnswers[questionId] = previousAnswer;
+          }
+          return newAnswers;
+        });
       }
     } catch (err) {
       console.error("Network error submitting answer:", err);
+      // Revert on network error
+      setAnswers(prev => {
+        const newAnswers = { ...prev };
+        if (previousAnswer === undefined) {
+          delete newAnswers[questionId];
+        } else {
+          newAnswers[questionId] = previousAnswer;
+        }
+        return newAnswers;
+      });
     }
   }
 
   async function submitExamOnBackend() {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       const res = await fetch('http://localhost:3000/exam/submit', {
         method: 'POST',
@@ -51,9 +75,11 @@ export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
         onFinish(data.result);
       } else {
         alert("Failed to submit exam: " + data.message);
+        setIsSubmitting(false);
       }
     } catch (err) {
       console.error("Failed to submit exam:", err);
+      setIsSubmitting(false);
     }
   }
 
@@ -117,17 +143,10 @@ export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
               let textColor = '#334155';
               let cursorStyle = 'pointer';
 
-              if (isAnswered) {
-                cursorStyle = 'not-allowed';
-                if (isThisSelected) {
-                  bgColor = '#eff6ff'; // light blue
-                  borderColor = '#3b82f6'; // blue
-                  textColor = '#1e3a8a'; // dark blue
-                } else {
-                  bgColor = '#f8fafc';
-                  borderColor = '#e2e8f0';
-                  textColor = '#94a3b8'; // gray out unselected
-                }
+              if (isThisSelected) {
+                bgColor = '#eff6ff'; // light blue
+                borderColor = '#3b82f6'; // blue
+                textColor = '#1e3a8a'; // dark blue
               }
 
               return (
@@ -185,8 +204,17 @@ export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
               Next
             </button>
           ) : (
-            <button className="btn btn-primary" style={{ backgroundColor: '#10b981', borderColor: '#10b981' }} onClick={submitExamOnBackend}>
-              Finish Exam
+            <button 
+              className="btn btn-primary" 
+              style={{ 
+                backgroundColor: isSubmitting ? '#9ca3af' : '#10b981', 
+                borderColor: isSubmitting ? '#9ca3af' : '#10b981',
+                cursor: isSubmitting ? 'not-allowed' : 'pointer'
+              }} 
+              onClick={submitExamOnBackend}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Submitting...' : 'Finish Exam'}
             </button>
           )}
         </div>

@@ -11,6 +11,13 @@ function App() {
   const [fullScreen, setFullScreen] = useState(false);
   const [timer, setTimer] = useState('');
   const [sessionId, setSessionId] = useState(null);
+  const sessionIdRef = useRef(null);
+
+  // Keep ref in sync with state to avoid stale closures in intervals/listeners
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
   const [quizStarted, setQuizStarted] = useState(false);
   const [restoredAnswers, setRestoredAnswers] = useState({});
   const [examResults, setExamResults] = useState(null);
@@ -104,10 +111,10 @@ function App() {
       const arrayBuffer = await blob.arrayBuffer();
 
       // Send raw binary buffer to main process
-      window.athena.storeCameraSnapImageOnDisk(arrayBuffer, sessionId);
+      window.athena.storeCameraSnapImageOnDisk(arrayBuffer, sessionIdRef.current);
 
       // Also capture the desktop screen natively
-      window.athena.captureScreen(sessionId);
+      window.athena.captureScreen(sessionIdRef.current);
     } catch (error) {
       console.error("Failed to capture image via ImageCapture:", error);
     }
