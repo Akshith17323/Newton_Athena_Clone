@@ -5,8 +5,9 @@ import './App.css';
 
 function App() {
   // Candidate & Proctoring State
-  const [studentName, setStudentName] = useState(() => localStorage.getItem('athena_studentName') || 'Akshith Kumar');
-  const [studentId, setStudentId] = useState(() => localStorage.getItem('athena_studentId') || 'NST-2024-AI');
+  const [studentName, setStudentName] = useState(() => localStorage.getItem('athena_studentName') || '');
+  const [studentId, setStudentId] = useState(() => localStorage.getItem('athena_studentId') || '');
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem('athena_studentName'));
   const [violationCount, setViolationCount] = useState(0);
 
   const [cameraEnabled, setCameraEnabled] = useState(false);
@@ -80,24 +81,58 @@ function App() {
     return () => window.removeEventListener('contextmenu', handleContextMenu);
   }, []);
 
-  // Anti-cheat: detect fullscreen exit
+  // Automatically check if application is already full screen
   useEffect(() => {
-    const handleFullscreenChange = () => {
+    async function checkFullscreenStatus() {
+      if (window.athena?.isFullScreen) {
+        try {
+          const isFs = await window.athena.isFullScreen();
+          if (isFs) {
+            setFullScreen(true);
+          }
+        } catch (err) {
+          console.error("Error checking fullscreen:", err);
+        }
+      } else if (document.fullscreenElement || window.innerHeight >= screen.availHeight) {
+        setFullScreen(true);
+      }
+    }
+    checkFullscreenStatus();
+
+    const removeElectronFsListener = window.athena?.registerListenerForFullscreenChange?.((isFs) => {
+      setFullScreen(isFs);
+      if (!isFs && quizStarted) {
+        setViolationCount((c) => {
+          const next = c + 1;
+          alert(`Anti-Cheat Warning: Fullscreen mode was exited! (Violation #${next})`);
+          return next;
+        });
+      }
+    });
+
+    const handleDomFsChange = () => {
       if (!document.fullscreenElement) {
-        setFullScreen(false);
-        if (quizStarted) {
-          setViolationCount((c) => {
-            const next = c + 1;
-            alert(`Anti-Cheat Warning: Fullscreen mode was exited! (Violation #${next})`);
-            return next;
+        if (window.athena?.isFullScreen) {
+          window.athena.isFullScreen().then(isFs => {
+            setFullScreen(isFs);
+            if (!isFs && quizStarted) {
+              setViolationCount(c => c + 1);
+            }
           });
+        } else {
+          setFullScreen(false);
         }
       } else {
         setFullScreen(true);
       }
     };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+
+    document.addEventListener('fullscreenchange', handleDomFsChange);
+
+    return () => {
+      if (removeElectronFsListener) removeElectronFsListener();
+      document.removeEventListener('fullscreenchange', handleDomFsChange);
+    };
   }, [quizStarted]);
 
   async function saveVideoScreenShots() {
@@ -185,11 +220,20 @@ function App() {
 
   async function enableFullScreen() {
     try {
-      await document.documentElement.requestFullscreen();
+      if (window.athena?.isFullScreen) {
+        const isFs = await window.athena.isFullScreen();
+        if (isFs) {
+          setFullScreen(true);
+          return;
+        }
+      }
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      }
       setFullScreen(true);
     } catch (error) {
       console.error(error);
-      alert('Cannot access full screen');
+      setFullScreen(true);
     }
   }
 
@@ -404,104 +448,127 @@ function App() {
         </div>
 
         <div className="navbar-right">
-          {/* Rewards Gift Button */}
-          <button className="reward-btn" title="Rewards" onClick={() => alert("11,178 Total XP Earned!")}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M20 6h-2.18c.11-.31.18-.65.18-1 0-1.66-1.34-3-3-3-1.05 0-1.96.54-2.5 1.35l-.5.65-.5-.65C10.96 2.54 10.05 2 9 2 7.34 2 6 3.34 6 5c0 .35.07.69.18 1H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-5-2c.55 0 1 .45 1 1s-.45 1-1 1h-2V5c0-.55.45-1 1-1zM9 4c.55 0 1 .45 1 1v1H8c-.55 0-1-.45-1-1s.45-1 1-1zm11 15H4v-2h16v2zm0-5H4V8h5.08L7 10.83 8.62 12 11 8.76V14h2V8.76L15.38 12 17 10.83 14.92 8H20v6z" />
-            </svg>
-          </button>
-
-          {/* Total XP Pill */}
-          <div className="xp-badge">
-            <span className="xp-label">Total XP</span>
-            <span className="xp-value">
-              <svg className="xp-icon" viewBox="0 0 24 24">
-                <polygon points="12 2 2 7 2 17 12 22 22 17 22 7" fill="#f59e0b" stroke="#d97706" strokeWidth="1" />
-                <path d="M12 6L8 12h4l-1 6 5-7h-4l2-5z" fill="#ffffff" />
-              </svg>
-              11,178
-            </span>
-          </div>
-
-          {/* Referrals / People Icon */}
-          <button className="nav-icon-btn" title="Referrals">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-              <circle cx="9" cy="7" r="4"></circle>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-            </svg>
-          </button>
-
-          {/* Notifications Bell */}
-          <button className="nav-icon-btn" title="Notifications">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-            </svg>
-          </button>
-
-          {/* User Profile Avatar with dropdown */}
-          <div className="profile-pill" onClick={() => setShowProfileMenu(p => !p)}>
-            <div className="avatar-circle">
-              {initials}
-            </div>
-            <svg className="chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-
-            {showProfileMenu && (
-              <div style={{
-                position: 'absolute',
-                top: '42px',
-                right: '0',
-                backgroundColor: '#ffffff',
-                border: '1px solid #e2e8f0',
-                borderRadius: '10px',
-                boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
-                width: '180px',
-                padding: '6px',
-                zIndex: 200
-              }}>
-                <div style={{ padding: '8px 12px', fontSize: '13px', fontWeight: '600', color: '#0f172a', borderBottom: '1px solid #f1f5f9' }}>
-                  {studentName}
-                  <div style={{ fontSize: '11px', fontWeight: '400', color: '#64748b' }}>{studentId}</div>
-                </div>
-                <button
-                  style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '6px' }}
-                  onClick={() => setShowRulesModal(true)}
-                >
-                  Exam Rules
-                </button>
-                <button
-                  style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '6px' }}
-                  onClick={() => setShowPermissionsModal(true)}
-                >
-                  Proctoring Setup
-                </button>
-                <button
-                  style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '8px 12px', fontSize: '13px', color: '#dc2626', cursor: 'pointer', borderRadius: '6px' }}
-                  onClick={() => window.athena?.exitExam?.(true)}
-                >
-                  Exit Exam
-                </button>
+          {isLoggedIn ? (
+            <div className="profile-pill" onClick={() => setShowProfileMenu(p => !p)}>
+              <span style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a', marginRight: '4px' }}>
+                {studentName}
+              </span>
+              <div className="avatar-circle">
+                {initials}
               </div>
-            )}
-          </div>
+              <svg className="chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+
+              {showProfileMenu && (
+                <div style={{
+                  position: 'absolute',
+                  top: '42px',
+                  right: '0',
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
+                  width: '180px',
+                  padding: '6px',
+                  zIndex: 200
+                }}>
+                  <div style={{ padding: '8px 12px', fontSize: '13px', fontWeight: '600', color: '#0f172a', borderBottom: '1px solid #f1f5f9' }}>
+                    {studentName}
+                    <div style={{ fontSize: '11px', fontWeight: '400', color: '#64748b' }}>{studentId}</div>
+                  </div>
+                  <button
+                    style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '6px' }}
+                    onClick={() => setShowRulesModal(true)}
+                  >
+                    Exam Rules
+                  </button>
+                  <button
+                    style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '6px' }}
+                    onClick={() => {
+                      localStorage.removeItem('athena_studentName');
+                      localStorage.removeItem('athena_studentId');
+                      setIsLoggedIn(false);
+                      setShowProfileMenu(false);
+                    }}
+                  >
+                    Switch User
+                  </button>
+                  <button
+                    style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '8px 12px', fontSize: '13px', color: '#dc2626', cursor: 'pointer', borderRadius: '6px' }}
+                    onClick={() => window.athena?.exitExam?.(true)}
+                  >
+                    Exit Exam
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              className="btn btn-outline btn-sm"
+              style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+              onClick={() => window.athena?.exitExam?.(true)}
+            >
+              Exit
+            </button>
+          )}
         </div>
       </header>
 
       {/* Main Page Area */}
       <main className="main-container">
-        {/* Back Link */}
-        <button className="back-link" onClick={() => window.athena?.exitExam?.(true)}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6"></polyline>
-          </svg>
-          <span>Back</span>
-        </button>
+        {!isLoggedIn ? (
+          <div className="login-container">
+            <h2 className="login-title">Candidate Sign In</h2>
+            <p className="login-subtitle">Enter your name and student ID to access the examination portal.</p>
 
-        {/* Central Test Details Card */}
+            <div className="login-field">
+              <label className="login-label">Full Name</label>
+              <input
+                type="text"
+                className="login-input"
+                placeholder="e.g. Akshith Kumar"
+                value={studentName}
+                onChange={(e) => setStudentName(e.target.value)}
+              />
+            </div>
+
+            <div className="login-field">
+              <label className="login-label">Student ID / Roll Number</label>
+              <input
+                type="text"
+                className="login-input"
+                placeholder="e.g. NST-2024-AI"
+                value={studentId}
+                onChange={(e) => setStudentId(e.target.value)}
+              />
+            </div>
+
+            <button
+              className="login-btn"
+              disabled={!studentName.trim() || !studentId.trim()}
+              onClick={() => {
+                if (studentName.trim() && studentId.trim()) {
+                  localStorage.setItem('athena_studentName', studentName.trim());
+                  localStorage.setItem('athena_studentId', studentId.trim());
+                  setIsLoggedIn(true);
+                }
+              }}
+            >
+              Sign In & Continue
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Back Link */}
+            <button className="back-link" onClick={() => window.athena?.exitExam?.(true)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+              <span>Back</span>
+            </button>
+
+            {/* Central Test Details Card */}
         <div className="test-card">
           {/* Top Graphic Banner */}
           <div className="banner-graphic-container">
@@ -598,6 +665,8 @@ function App() {
             </button>
           </div>
         </div>
+          </>
+        )}
       </main>
 
       {/* Permissions / Proctoring Setup Modal */}

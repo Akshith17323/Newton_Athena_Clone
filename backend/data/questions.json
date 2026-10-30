@@ -1,56 +1,45 @@
 [
   {
     "id": 1,
-    "question": "Which Electron process is responsible for creating BrowserWindow?",
+    "question": "Which statement correctly describes a structural difference between a GRU and an LSTM?",
     "options": [
-      "Renderer Process",
-      "Main Process",
-      "React Process",
-      "Preload Process"
+      "It uses no gates and relies on a plain tanh-based update",
+      "It keeps a separate cell state and uses three gates",
+      "It reads sequences in both directions by design",
+      "It merges cell and hidden states, using two gates"
     ],
-    "correctAnswer": 1
+    "correctAnswer": 3
   },
   {
     "id": 2,
-    "question": "Which Electron API is commonly used in the renderer to invoke a handler in the main process?",
+    "question": "What is the primary function of the forget gate in a standard LSTM cell?",
     "options": [
-      "ipcRenderer.invoke",
-      "BrowserWindow.loadURL",
-      "fs.writeFileSync",
-      "dialog.showMessageBox"
+      "To determine which information from the previous cell state should be discarded",
+      "To compute the candidate hidden state using a ReLU activation",
+      "To regulate how much of the current input is written into long-term memory",
+      "To filter the output activations before passing to the next layer"
     ],
     "correctAnswer": 0
   },
   {
     "id": 3,
-    "question": "Why is a preload script commonly used in Electron?",
+    "question": "Which two gates are present in a Gated Recurrent Unit (GRU)?",
     "options": [
-      "To style the React application",
-      "To expose controlled APIs safely to the renderer",
-      "To create the Express server",
-      "To replace the main process"
+      "Input Gate and Output Gate",
+      "Reset Gate and Update Gate",
+      "Forget Gate and Memory Gate",
+      "Candidate Gate and Retention Gate"
     ],
     "correctAnswer": 1
   },
   {
     "id": 4,
-    "question": "Which HTTP method is normally used to fetch exam questions?",
+    "question": "Why do gated architectures like LSTM and GRU effectively address the vanishing gradient problem in traditional RNNs?",
     "options": [
-      "GET",
-      "DELETE",
-      "PATCH",
-      "CONNECT"
-    ],
-    "correctAnswer": 0
-  },
-  {
-    "id": 5,
-    "question": "What does fs.writeFileSync() do?",
-    "options": [
-      "Reads camera frames",
-      "Writes data to a file and waits until it finishes",
-      "Starts the Electron renderer",
-      "Sends an IPC event"
+      "They replace backpropagation through time with feedforward approximations",
+      "They use linear additive gradient highways through the cell state over time steps",
+      "They restrict all weight matrices to be strictly orthogonal during training",
+      "They eliminate recurrent connections between consecutive hidden states"
     ],
     "correctAnswer": 1
   }
