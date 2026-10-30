@@ -14,6 +14,8 @@ function formatTime(totalSeconds) {
 
 function App() {
   // state variables
+  const [studentName, setStudentName] = useState(() => localStorage.getItem('athena_studentName') || '');
+  const [studentId, setStudentId] = useState(() => localStorage.getItem('athena_studentId') || '');
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [screenShared, setScreenShared] = useState(false);
   const [folderSelected, setFolderSelected] = useState(false);
@@ -174,15 +176,23 @@ function App() {
   }
 
   async function startExamOnBackend() {
+    if (!studentName.trim() || !studentId.trim()) {
+      alert("Please enter both your Full Name and Student ID before proceeding.");
+      return;
+    }
+
     try {
+      localStorage.setItem('athena_studentName', studentName.trim());
+      localStorage.setItem('athena_studentId', studentId.trim());
+
       const response = await fetch('http://localhost:3000/exam/start', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          userId: "user-123", // Replace with real user input later
-          name: "Test User"
+          userId: studentId.trim(),
+          name: studentName.trim()
         })
       });
       const data = await response.json();
@@ -206,6 +216,11 @@ function App() {
       <div className="page-container">
         <div className="card-container" style={{ textAlign: 'center' }}>
           <h2>Exam Results</h2>
+          {studentName && (
+            <p style={{ color: '#64748b', marginTop: '6px', fontSize: '15px' }}>
+              Candidate: <strong>{studentName}</strong> {studentId ? `(${studentId})` : ''}
+            </p>
+          )}
           <div style={{ marginTop: '20px', fontSize: '18px' }}>
             <p>Attempted: <strong>{examResults.attempted}</strong></p>
             <p style={{ color: '#16a34a' }}>Correct: <strong>{examResults.correct}</strong></p>
@@ -239,6 +254,8 @@ function App() {
         <Quiz 
           key={sessionId}
           sessionId={sessionId} 
+          studentName={studentName}
+          studentId={studentId}
           timer={timer} 
           restoredAnswers={restoredAnswers} 
           onFinish={(results) => {
@@ -255,6 +272,58 @@ function App() {
     <div className="page-container">
       {/* Main Card */}
       <div className="card-container">
+        {/* Section 0: Candidate Details */}
+        <div className="permission-item">
+          <div className="permission-content" style={{ width: '100%' }}>
+            <h3>Candidate Details</h3>
+            <p>Enter your full name and student ID / roll number before starting.</p>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: '220px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#475569' }}>
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. John Doe"
+                  value={studentName}
+                  onChange={(e) => setStudentName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '14px',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: '220px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#475569' }}>
+                  Student ID / Roll No.
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. CS2026-001"
+                  value={studentId}
+                  onChange={(e) => setStudentId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '14px',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="divider"></div>
+
         {/* Section 1: Camera / Heimdall */}
         <div className="permission-item">
           <div className="permission-content">
@@ -341,7 +410,7 @@ function App() {
       <div className="bottom-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button
           className="btn btn-primary"
-          disabled={!cameraEnabled || !fullScreen || !screenShared || !folderSelected}
+          disabled={!sessionId && (!studentName.trim() || !studentId.trim() || !cameraEnabled || !fullScreen || !screenShared || !folderSelected)}
           onClick={async () => {
             try {
               if (sessionId) {

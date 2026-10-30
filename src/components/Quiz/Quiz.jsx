@@ -9,7 +9,7 @@ function formatTime(totalSeconds) {
   return `${String(mins).padStart(2, '0')}:${String(remainingSecs).padStart(2, '0')}`;
 }
 
-export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
+export default function Quiz({ sessionId, studentName, studentId, timer, restoredAnswers, onFinish }) {
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState(restoredAnswers || {});
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -131,6 +131,13 @@ export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
             )
           })}
         </div>
+        {(studentName || studentId) && (
+          <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #e2e8f0', fontSize: '12px', color: '#64748b' }}>
+            <div style={{ fontWeight: '600', color: '#0f172a', marginBottom: '4px' }}>Candidate</div>
+            {studentName && <div style={{ wordBreak: 'break-word' }}>{studentName}</div>}
+            {studentId && <div style={{ color: '#94a3b8' }}>ID: {studentId}</div>}
+          </div>
+        )}
       </div>
 
       {/* Main Question Area */}
