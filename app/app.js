@@ -4,9 +4,22 @@ import fs from "fs";
 import { fork } from "child_process";
 
 let electronWindow = null;
-let startTimestamp = null
+let startTimestamp = null;
 let cameraShotPath = null;
 let forceQuit = false;
+let timerInterval = null;
+let cameraSnapInterval = null;
+
+function clearExamIntervals() {
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+    if (cameraSnapInterval) {
+        clearInterval(cameraSnapInterval);
+        cameraSnapInterval = null;
+    }
+}
 
 function attemptQuit() {
     if (forceQuit) return;
@@ -69,18 +82,28 @@ function createWindow() {
 }
 
 ipcMain.handle('start-timer', () => {
+    clearExamIntervals();
     startTimestamp = Date.now();
 
-    // Send Timer Tick every 1s
-    setInterval(() => {
-        electronWindow.webContents.send('timer', (Date.now() - startTimestamp) / 1000);
+    // Send Timer Tick every 1s (rounded integer elapsed seconds)
+    timerInterval = setInterval(() => {
+        if (electronWindow && !electronWindow.isDestroyed()) {
+            const elapsed = Math.floor((Date.now() - startTimestamp) / 1000);
+            electronWindow.webContents.send('timer', elapsed);
+        }
     }, 1000);
 
     // Capture user's camera snap every 5s
-    setInterval(() => {
-        electronWindow.webContents.send('camera-shot')
+    cameraSnapInterval = setInterval(() => {
+        if (electronWindow && !electronWindow.isDestroyed()) {
+            electronWindow.webContents.send('camera-shot');
+        }
     }, 5000);
-})
+});
+
+ipcMain.handle('stop-timer', () => {
+    clearExamIntervals();
+});
 
 
 ipcMain.handle('store-camera-snap-image-on-disk', (_event, data, sessionId) => {

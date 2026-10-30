@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld("athena", {
     startTimerOnMain: () => {
         return ipcRenderer.invoke('start-timer');
     },
+    stopTimerOnMain: () => {
+        return ipcRenderer.invoke('stop-timer');
+    },
 
     // New Preload Functions
     registerListenerForKeyboardInputFromMain: (callback) => {

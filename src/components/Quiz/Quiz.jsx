@@ -1,5 +1,14 @@
 import { useState, useEffect } from 'react';
 
+function formatTime(totalSeconds) {
+  if (totalSeconds === null || totalSeconds === undefined || totalSeconds === '') return '00:00';
+  const sec = typeof totalSeconds === 'number' ? totalSeconds : parseInt(totalSeconds, 10);
+  if (isNaN(sec)) return '00:00';
+  const mins = Math.floor(sec / 60);
+  const remainingSecs = sec % 60;
+  return `${String(mins).padStart(2, '0')}:${String(remainingSecs).padStart(2, '0')}`;
+}
+
 export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState(restoredAnswers || {});
@@ -129,7 +138,7 @@ export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid #e2e8f0', paddingBottom: '16px' }}>
           <h2>Question {currentIndex + 1} of {questions.length}</h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ fontWeight: 'bold', color: '#dc2626', fontSize: '18px' }}>Time: {timer}s</div>
+            <div style={{ fontWeight: 'bold', color: '#dc2626', fontSize: '18px' }}>Time: {formatTime(timer)}</div>
             <button
               className="btn btn-outline"
               style={{ padding: '6px 14px', fontSize: '13px', color: '#dc2626', borderColor: '#fca5a5' }}

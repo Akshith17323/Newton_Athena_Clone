@@ -3,6 +3,15 @@ import { useEffect, useRef, useState } from 'react'
 import Quiz from './components/Quiz/Quiz'
 import './App.css'
 
+function formatTime(totalSeconds) {
+  if (totalSeconds === null || totalSeconds === undefined || totalSeconds === '') return '00:00';
+  const sec = typeof totalSeconds === 'number' ? totalSeconds : parseInt(totalSeconds, 10);
+  if (isNaN(sec)) return '00:00';
+  const mins = Math.floor(sec / 60);
+  const remainingSecs = sec % 60;
+  return `${String(mins).padStart(2, '0')}:${String(remainingSecs).padStart(2, '0')}`;
+}
+
 function App() {
   // state variables
   const [cameraEnabled, setCameraEnabled] = useState(false);
@@ -82,19 +91,6 @@ function App() {
       removeKeyboardListener()
     };
   }, []);
-
-  // Save screenshots every 5 seconds when camera is enabled and quiz started
-  useEffect(() => {
-    let intervalId;
-    if (cameraEnabled && quizStarted) {
-      intervalId = setInterval(() => {
-        saveVideoScreenShots();
-      }, 5000);
-    }
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [cameraEnabled, quizStarted]);
 
   async function saveVideoScreenShots() {
     if (!sessionIdRef.current) return;
@@ -246,6 +242,7 @@ function App() {
           timer={timer} 
           restoredAnswers={restoredAnswers} 
           onFinish={(results) => {
+            window.athena?.stopTimerOnMain?.();
             setExamResults(results);
             setQuizStarted(false);
           }} 
@@ -372,7 +369,7 @@ function App() {
       </div>
 
       <div>
-        {timer + ' (s) elapsed'}
+        {formatTime(timer)} elapsed
       </div>
 
       <div style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap' }}>
