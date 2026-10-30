@@ -349,20 +349,23 @@ function App() {
 
   if (quizStarted) {
     return (
-      <div style={{ position: 'relative', width: '100%', minHeight: '100vh', backgroundColor: '#f8fafc' }}>
+      <div style={{ position: 'relative', width: '100%', minHeight: '100vh', backgroundColor: '#ffffff' }}>
         <video
           ref={videoRef}
           autoPlay
           playsInline
           style={{
             position: 'fixed',
-            bottom: '20px',
-            right: '20px',
-            width: '150px',
-            borderRadius: '10px',
+            bottom: '76px',
+            right: '28px',
+            width: '180px',
+            height: '105px',
+            objectFit: 'cover',
+            borderRadius: '6px',
             zIndex: 1000,
-            boxShadow: '0 8px 16px rgba(0,0,0,0.15)',
-            border: '2px solid #ffffff'
+            boxShadow: '0 8px 18px rgba(0,0,0,0.2)',
+            border: '2px solid #0f172a',
+            backgroundColor: '#000000'
           }}
         />
         <Quiz
