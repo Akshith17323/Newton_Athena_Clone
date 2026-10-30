@@ -1,49 +1,45 @@
 // App.jsx
-import { useEffect, useRef, useState } from 'react'
-import Quiz from './components/Quiz/Quiz'
-import './App.css'
-
-function formatTime(totalSeconds) {
-  if (totalSeconds === null || totalSeconds === undefined || totalSeconds === '') return '00:00';
-  const sec = typeof totalSeconds === 'number' ? totalSeconds : parseInt(totalSeconds, 10);
-  if (isNaN(sec)) return '00:00';
-  const mins = Math.floor(sec / 60);
-  const remainingSecs = sec % 60;
-  return `${String(mins).padStart(2, '0')}:${String(remainingSecs).padStart(2, '0')}`;
-}
+import { useEffect, useRef, useState } from 'react';
+import Quiz from './components/Quiz/Quiz';
+import './App.css';
 
 function App() {
-  // state variables
-  const [studentName, setStudentName] = useState(() => localStorage.getItem('athena_studentName') || '');
-  const [studentId, setStudentId] = useState(() => localStorage.getItem('athena_studentId') || '');
+  // Candidate & Proctoring State
+  const [studentName, setStudentName] = useState(() => localStorage.getItem('athena_studentName') || 'Akshith Kumar');
+  const [studentId, setStudentId] = useState(() => localStorage.getItem('athena_studentId') || 'NST-2024-AI');
   const [violationCount, setViolationCount] = useState(0);
+
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [screenShared, setScreenShared] = useState(false);
   const [folderSelected, setFolderSelected] = useState(false);
   const [fullScreen, setFullScreen] = useState(false);
+
   const [timer, setTimer] = useState('');
   const [sessionId, setSessionId] = useState(null);
   const sessionIdRef = useRef(null);
 
-  // Keep ref in sync with state to avoid stale closures in intervals/listeners
+  const [quizStarted, setQuizStarted] = useState(false);
+  const [restoredAnswers, setRestoredAnswers] = useState({});
+  const [examResults, setExamResults] = useState(null);
+
+  // Modals & UI states
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [showRulesModal, setShowRulesModal] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
-
-  const [quizStarted, setQuizStarted] = useState(false);
-  const [showRulesModal, setShowRulesModal] = useState(false);
-  const [restoredAnswers, setRestoredAnswers] = useState({});
-  const [examResults, setExamResults] = useState(null);
-  // ref variables
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
 
   // Keep video stream alive across re-renders
   useEffect(() => {
     if (videoRef.current && streamRef.current) {
       videoRef.current.srcObject = streamRef.current;
     }
-  }, [quizStarted]);
+  }, [quizStarted, showPermissionsModal]);
 
   // Restore session on load
   useEffect(() => {
@@ -77,14 +73,14 @@ function App() {
     }
   }, []);
 
-  // Disable context menu for anti-cheat
+  // Anti-cheat: prevent right click
   useEffect(() => {
     const handleContextMenu = (e) => e.preventDefault();
     window.addEventListener('contextmenu', handleContextMenu);
     return () => window.removeEventListener('contextmenu', handleContextMenu);
   }, []);
 
-  // Detect fullscreen exit
+  // Anti-cheat: detect fullscreen exit
   useEffect(() => {
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement) {
@@ -104,19 +100,33 @@ function App() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, [quizStarted]);
 
+  async function saveVideoScreenShots() {
+    if (!sessionIdRef.current) return;
+    if (!videoRef.current || !videoRef.current.srcObject) return;
+
+    try {
+      const track = videoRef.current.srcObject.getVideoTracks()[0];
+      if (!track) return;
+
+      const imageCapture = new ImageCapture(track);
+      const blob = await imageCapture.takePhoto();
+      const arrayBuffer = await blob.arrayBuffer();
+
+      window.athena?.storeCameraSnapImageOnDisk?.(arrayBuffer, sessionIdRef.current);
+      window.athena?.captureScreen?.(sessionIdRef.current);
+    } catch (error) {
+      console.error("Failed to capture image via ImageCapture:", error);
+    }
+  }
+
+  // Main IPC listeners
   useEffect(() => {
-    // Register Listener for handling Timer Tick from Main
-    const removeTimerTickListener = window.athena.registerListenerForTimerTickFromMain(setTimer);
-
-    // Register Listener for handling Camera Snap Request from Main
-    const removeCameraSnapListener = window.athena.registerListenerForCameraSnapFromMain(saveVideoScreenShots);
-
-    // Register Listener for Keyboard inputs
-    const removeKeyboardListener = window.athena.registerListenerForKeyboardInputFromMain((input) => {
+    const removeTimerTickListener = window.athena?.registerListenerForTimerTickFromMain?.(setTimer) || (() => {});
+    const removeCameraSnapListener = window.athena?.registerListenerForCameraSnapFromMain?.(saveVideoScreenShots) || (() => {});
+    const removeKeyboardListener = window.athena?.registerListenerForKeyboardInputFromMain?.((input) => {
       console.log("Keyboard input intercepted from main:", input);
-    });
+    }) || (() => {});
 
-    // Register Listener for window blur (anti-cheat focus loss)
     const removeWindowBlurListener = window.athena?.registerListenerForWindowBlur?.(() => {
       if (quizStarted) {
         setViolationCount((c) => {
@@ -125,48 +135,19 @@ function App() {
           return next;
         });
       }
-    });
+    }) || (() => {});
 
     return () => {
       removeTimerTickListener();
       removeCameraSnapListener();
       removeKeyboardListener();
-      if (removeWindowBlurListener) removeWindowBlurListener();
+      removeWindowBlurListener();
     };
   }, [quizStarted]);
 
-  async function saveVideoScreenShots() {
-    if (!sessionIdRef.current) return;
-    
-    if (!videoRef.current || !videoRef.current.srcObject) {
-      return;
-    }
-
-    try {
-      const track = videoRef.current.srcObject.getVideoTracks()[0];
-      if (!track) return;
-
-      // Use ImageCapture API
-      const imageCapture = new ImageCapture(track);
-      const blob = await imageCapture.takePhoto();
-      const arrayBuffer = await blob.arrayBuffer();
-
-      // Send raw binary buffer to main process
-      window.athena.storeCameraSnapImageOnDisk(arrayBuffer, sessionIdRef.current);
-
-      // Also capture the desktop screen natively
-      window.athena.captureScreen(sessionIdRef.current);
-    } catch (error) {
-      console.error("Failed to capture image via ImageCapture:", error);
-    }
-  }
-
   async function getCameraAccess() {
     try {
-      const videoData = await navigator.mediaDevices.getUserMedia({
-        video: true
-      });
-
+      const videoData = await navigator.mediaDevices.getUserMedia({ video: true });
       streamRef.current = videoData;
       if (videoRef.current) {
         videoRef.current.srcObject = videoData;
@@ -180,12 +161,8 @@ function App() {
 
   async function getScreenAccess() {
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: false
-      });
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       setScreenShared(true);
-      // Listen for stream stop to revoke permission state if user stops sharing
       stream.getVideoTracks()[0].onended = () => {
         setScreenShared(false);
       };
@@ -197,7 +174,7 @@ function App() {
 
   async function handleSelectFolder() {
     try {
-      const path = await window.athena.selectFolder();
+      const path = await window.athena?.selectFolder?.();
       if (path) {
         setFolderSelected(true);
       }
@@ -218,7 +195,7 @@ function App() {
 
   async function startExamOnBackend() {
     if (!studentName.trim() || !studentId.trim()) {
-      alert("Please enter both your Full Name and Student ID before proceeding.");
+      alert("Please enter both your Full Name and Student ID.");
       return;
     }
 
@@ -236,9 +213,7 @@ function App() {
 
       const response = await fetch('http://localhost:3000/exam/start', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: studentId.trim(),
           name: studentName.trim()
@@ -249,9 +224,10 @@ function App() {
         console.log("Exam started with Session ID:", data.sessionId);
         setSessionId(data.sessionId);
         setQuizStarted(true);
+        setShowPermissionsModal(false);
         localStorage.setItem('athena_sessionId', data.sessionId);
+        await window.athena?.startTimerOnMain?.();
       } else {
-        console.error("Failed to start exam:", data.message);
         alert("Failed to start exam: " + data.message);
       }
     } catch (error) {
@@ -260,293 +236,494 @@ function App() {
     }
   }
 
+  const isPermissionsReady = cameraEnabled && screenShared && folderSelected && fullScreen && studentName.trim() && studentId.trim();
+
+  function handleStartTestClick() {
+    if (sessionId) {
+      setQuizStarted(true);
+      window.athena?.startTimerOnMain?.();
+      return;
+    }
+
+    if (isPermissionsReady) {
+      startExamOnBackend();
+    } else {
+      setShowPermissionsModal(true);
+    }
+  }
+
+  // Get user initials for avatar
+  const initials = studentName
+    .split(' ')
+    .filter(Boolean)
+    .map(p => p[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || 'NS';
+
   if (examResults) {
     return (
-      <div className="page-container">
-        <div className="card-container" style={{ textAlign: 'center' }}>
-          <h2>Exam Results</h2>
-          {studentName && (
-            <p style={{ color: '#64748b', marginTop: '6px', fontSize: '15px' }}>
-              Candidate: <strong>{studentName}</strong> {studentId ? `(${studentId})` : ''}
+      <div className="app-wrapper">
+        {/* Navbar */}
+        <header className="navbar">
+          <div className="navbar-left">
+            <div className="batch-pill">
+              <svg className="batch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="8" y1="21" x2="16" y2="21"></line>
+                <line x1="12" y1="17" x2="12" y2="21"></line>
+              </svg>
+              <span>NST'24 CS+AI RU</span>
+              <svg className="chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </div>
+          </div>
+          <div className="navbar-right">
+            <div className="xp-badge">
+              <span className="xp-label">Total XP</span>
+              <span className="xp-value">
+                <svg className="xp-icon" viewBox="0 0 24 24" fill="#f59e0b">
+                  <path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5zm1 14h-2v-4H9l4-7v4h2l-2 7z" />
+                </svg>
+                11,178
+              </span>
+            </div>
+            <div className="avatar-circle">{initials}</div>
+          </div>
+        </header>
+
+        <main className="main-container">
+          <div className="test-card" style={{ textAlign: 'center', padding: '36px 28px' }}>
+            <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#0f172a' }}>Exam Results</h2>
+            <p style={{ color: '#64748b', marginTop: '6px', fontSize: '14.5px' }}>
+              Candidate: <strong>{studentName}</strong> ({studentId})
             </p>
-          )}
-          <div style={{ marginTop: '20px', fontSize: '18px' }}>
-            <p>Attempted: <strong>{examResults.attempted}</strong></p>
-            <p style={{ color: '#16a34a' }}>Correct: <strong>{examResults.correct}</strong></p>
-            <p style={{ color: '#dc2626' }}>Wrong: <strong>{examResults.wrong}</strong></p>
+
+            <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'center', gap: '28px' }}>
+              <div style={{ padding: '16px 24px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase' }}>Attempted</div>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: '#0f172a', marginTop: '4px' }}>{examResults.attempted}</div>
+              </div>
+              <div style={{ padding: '16px 24px', background: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+                <div style={{ fontSize: '12px', color: '#166534', fontWeight: '600', textTransform: 'uppercase' }}>Correct</div>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: '#16a34a', marginTop: '4px' }}>{examResults.correct}</div>
+              </div>
+              <div style={{ padding: '16px 24px', background: '#fef2f2', borderRadius: '12px', border: '1px solid #fecaca' }}>
+                <div style={{ fontSize: '12px', color: '#991b1b', fontWeight: '600', textTransform: 'uppercase' }}>Wrong</div>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: '#dc2626', marginTop: '4px' }}>{examResults.wrong}</div>
+              </div>
+            </div>
+
             {violationCount > 0 && (
-              <p style={{ color: '#d97706', marginTop: '8px' }}>
-                Proctoring Warnings: <strong>{violationCount}</strong>
+              <p style={{ color: '#d97706', marginTop: '20px', fontSize: '14px', fontWeight: '500' }}>
+                Proctoring Warnings Recorded: <strong>{violationCount}</strong>
               </p>
             )}
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '36px' }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setExamResults(null);
+                  setSessionId(null);
+                  setRestoredAnswers({});
+                  localStorage.removeItem('athena_sessionId');
+                }}
+              >
+                Start New Exam
+              </button>
+              <button
+                className="btn btn-outline"
+                style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+                onClick={() => window.athena?.exitExam?.(false)}
+              >
+                Exit App
+              </button>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '32px' }}>
-            <button className="btn btn-primary" onClick={() => {
-              setExamResults(null);
-              setSessionId(null);
-              setRestoredAnswers({});
-              localStorage.removeItem('athena_sessionId');
-            }}>Start New Exam</button>
-            <button className="btn btn-outline" style={{ color: '#dc2626', borderColor: '#fca5a5' }} onClick={() => {
-              window.athena?.exitExam(false);
-            }}>Exit Exam</button>
-          </div>
-        </div>
+        </main>
       </div>
     );
   }
 
   if (quizStarted) {
     return (
-      <div style={{ position: 'relative' }}>
+      <div style={{ position: 'relative', width: '100%', minHeight: '100vh', backgroundColor: '#f8fafc' }}>
         <video
           ref={videoRef}
           autoPlay
           playsInline
-          style={{ position: 'fixed', bottom: '20px', right: '20px', width: '150px', borderRadius: '8px', zIndex: 1000, boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
+          style={{
+            position: 'fixed',
+            bottom: '20px',
+            right: '20px',
+            width: '150px',
+            borderRadius: '10px',
+            zIndex: 1000,
+            boxShadow: '0 8px 16px rgba(0,0,0,0.15)',
+            border: '2px solid #ffffff'
+          }}
         />
-        <Quiz 
+        <Quiz
           key={sessionId}
-          sessionId={sessionId} 
+          sessionId={sessionId}
           studentName={studentName}
           studentId={studentId}
-          timer={timer} 
+          timer={timer}
           violationCount={violationCount}
-          restoredAnswers={restoredAnswers} 
+          restoredAnswers={restoredAnswers}
           onFinish={(results) => {
             window.athena?.stopTimerOnMain?.();
             setExamResults(results);
             setQuizStarted(false);
-          }} 
+          }}
         />
       </div>
     );
   }
 
   return (
-    <div className="page-container">
-      {/* Main Card */}
-      <div className="card-container">
-        {/* Section 0: Candidate Details */}
-        <div className="permission-item">
-          <div className="permission-content" style={{ width: '100%' }}>
-            <h3>Candidate Details</h3>
-            <p>Enter your full name and student ID / roll number before starting.</p>
-            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: '220px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#475569' }}>
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. John Doe"
-                  value={studentName}
-                  onChange={(e) => setStudentName(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 14px',
-                    borderRadius: '8px',
-                    border: '1px solid #cbd5e1',
-                    fontSize: '14px',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                />
+    <div className="app-wrapper">
+      {/* Top Navbar matching Screenshot */}
+      <header className="navbar">
+        <div className="navbar-left">
+          <div className="batch-pill">
+            <svg className="batch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            </svg>
+            <span>NST'24 CS+AI RU</span>
+            <svg className="chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </div>
+        </div>
+
+        <div className="navbar-right">
+          {/* Rewards Gift Button */}
+          <button className="reward-btn" title="Rewards" onClick={() => alert("11,178 Total XP Earned!")}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20 6h-2.18c.11-.31.18-.65.18-1 0-1.66-1.34-3-3-3-1.05 0-1.96.54-2.5 1.35l-.5.65-.5-.65C10.96 2.54 10.05 2 9 2 7.34 2 6 3.34 6 5c0 .35.07.69.18 1H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-5-2c.55 0 1 .45 1 1s-.45 1-1 1h-2V5c0-.55.45-1 1-1zM9 4c.55 0 1 .45 1 1v1H8c-.55 0-1-.45-1-1s.45-1 1-1zm11 15H4v-2h16v2zm0-5H4V8h5.08L7 10.83 8.62 12 11 8.76V14h2V8.76L15.38 12 17 10.83 14.92 8H20v6z" />
+            </svg>
+          </button>
+
+          {/* Total XP Pill */}
+          <div className="xp-badge">
+            <span className="xp-label">Total XP</span>
+            <span className="xp-value">
+              <svg className="xp-icon" viewBox="0 0 24 24">
+                <polygon points="12 2 2 7 2 17 12 22 22 17 22 7" fill="#f59e0b" stroke="#d97706" strokeWidth="1" />
+                <path d="M12 6L8 12h4l-1 6 5-7h-4l2-5z" fill="#ffffff" />
+              </svg>
+              11,178
+            </span>
+          </div>
+
+          {/* Referrals / People Icon */}
+          <button className="nav-icon-btn" title="Referrals">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+          </button>
+
+          {/* Notifications Bell */}
+          <button className="nav-icon-btn" title="Notifications">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+          </button>
+
+          {/* User Profile Avatar with dropdown */}
+          <div className="profile-pill" onClick={() => setShowProfileMenu(p => !p)}>
+            <div className="avatar-circle">
+              {initials}
+            </div>
+            <svg className="chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+
+            {showProfileMenu && (
+              <div style={{
+                position: 'absolute',
+                top: '42px',
+                right: '0',
+                backgroundColor: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: '10px',
+                boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
+                width: '180px',
+                padding: '6px',
+                zIndex: 200
+              }}>
+                <div style={{ padding: '8px 12px', fontSize: '13px', fontWeight: '600', color: '#0f172a', borderBottom: '1px solid #f1f5f9' }}>
+                  {studentName}
+                  <div style={{ fontSize: '11px', fontWeight: '400', color: '#64748b' }}>{studentId}</div>
+                </div>
+                <button
+                  style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '6px' }}
+                  onClick={() => setShowRulesModal(true)}
+                >
+                  Exam Rules
+                </button>
+                <button
+                  style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '6px' }}
+                  onClick={() => setShowPermissionsModal(true)}
+                >
+                  Proctoring Setup
+                </button>
+                <button
+                  style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '8px 12px', fontSize: '13px', color: '#dc2626', cursor: 'pointer', borderRadius: '6px' }}
+                  onClick={() => window.athena?.exitExam?.(true)}
+                >
+                  Exit Exam
+                </button>
               </div>
-              <div style={{ flex: 1, minWidth: '220px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#475569' }}>
-                  Student ID / Roll No.
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. CS2026-001"
-                  value={studentId}
-                  onChange={(e) => setStudentId(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 14px',
-                    borderRadius: '8px',
-                    border: '1px solid #cbd5e1',
-                    fontSize: '14px',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-            </div>
+            )}
           </div>
         </div>
+      </header>
 
-        <div className="divider"></div>
+      {/* Main Page Area */}
+      <main className="main-container">
+        {/* Back Link */}
+        <button className="back-link" onClick={() => window.athena?.exitExam?.(true)}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+          <span>Back</span>
+        </button>
 
-        {/* Section 1: Camera / Heimdall */}
-        <div className="permission-item">
-          <div className="permission-content">
-            <h3>Configure Camera</h3>
-            <p>Kindly configure Camera to attempt quiz/contests.</p>
-            <div className="action-row">
-              <button
-                className="btn btn-black"
-                disabled={cameraEnabled}
-                onClick={getCameraAccess}
-              >
-                {cameraEnabled ? 'Camera Connected' : 'Get Camera Access'}
-              </button>
-
-              {/* Hidden/Active Video Feed Preview */}
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                className={`video-preview`}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="divider"></div>
-
-        {/* Section: Screen Share */}
-        <div className="permission-item">
-          <div className="permission-content">
-            <h3>Share Screen</h3>
-            <p>Kindly share your entire screen for monitoring.</p>
-            <div className="action-row">
-              <button
-                className="btn btn-black"
-                disabled={screenShared}
-                onClick={getScreenAccess}
-              >
-                {screenShared ? 'Screen Shared' : 'Share Screen'}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="divider"></div>
-
-        {/* Section: Select Folder */}
-        <div className="permission-item">
-          <div className="permission-content">
-            <h3>Select Folder</h3>
-            <p>Select a folder to save captured screenshots.</p>
-            <div className="action-row">
-              <button
-                className="btn btn-black"
-                disabled={folderSelected}
-                onClick={handleSelectFolder}
-              >
-                {folderSelected ? 'Folder Selected' : 'Select Folder'}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="divider"></div>
-
-        {/* Section: Fullscreen */}
-        <div className="permission-item">
-          <div className="permission-content">
-            <h3>Switch to full screen</h3>
-            <button
-              className="btn btn-primary"
-              disabled={fullScreen}
-              onClick={() => {
-                enableFullScreen();
-              }}
+        {/* Central Test Details Card */}
+        <div className="test-card">
+          {/* Top Graphic Banner */}
+          <div className="banner-graphic-container">
+            {/* Mint Wave Concentric Rings SVG */}
+            <svg
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+              viewBox="0 0 600 160"
+              preserveAspectRatio="none"
             >
-              {fullScreen ? 'Full Screen Enabled' : 'Give Full Screen Permissions'}
+              <rect width="600" height="160" fill="#ebf8f2" />
+              {/* Left Waves */}
+              <circle cx="300" cy="80" r="190" fill="none" stroke="#d5ede2" strokeWidth="22" />
+              <circle cx="300" cy="80" r="145" fill="none" stroke="#bfe5d1" strokeWidth="24" />
+              <circle cx="300" cy="80" r="102" fill="none" stroke="#a4dac0" strokeWidth="22" />
+            </svg>
+
+            {/* Centered White Circle with Green Clipboard */}
+            <div className="banner-circle">
+              <div className="banner-clipboard">
+                <div className="banner-clip"></div>
+                <div className="banner-line"></div>
+                <div className="banner-line"></div>
+                <div className="banner-line"></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Details Content */}
+          <div className="card-content">
+            <div className="meta-label">Playlist Title</div>
+            <div className="playlist-title">Gated Architectures, LSTM, GRU - Revision</div>
+
+            <div className="meta-label">Test Syllabus</div>
+            <div className="syllabus-text">Gated Architectures, LSTM, GRU</div>
+
+            {/* Metadata Info Rows */}
+            <div className="meta-info-grid">
+              <div className="meta-row">
+                {/* Scheduled For */}
+                <div className="meta-item">
+                  <div className="meta-icon-box">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                      <line x1="16" y1="2" x2="16" y2="6"></line>
+                      <line x1="8" y1="2" x2="8" y2="6"></line>
+                      <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="meta-info-title">Scheduled For</div>
+                    <div className="meta-info-value">Oct 29, 2026 3:35 PM</div>
+                  </div>
+                </div>
+
+                <div className="meta-divider"></div>
+
+                {/* Number of Questions */}
+                <div className="meta-item">
+                  <div className="meta-icon-box">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <polyline points="14 2 14 8 20 8"></polyline>
+                      <line x1="16" y1="13" x2="8" y2="13"></line>
+                      <line x1="16" y1="17" x2="8" y2="17"></line>
+                      <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="meta-info-title">Number of Questions</div>
+                    <div className="meta-info-value">4 Questions</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Total XP */}
+              <div className="meta-row">
+                <div className="meta-item">
+                  <div className="meta-icon-box xp">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="meta-info-title">Total XP</div>
+                    <div className="meta-info-value">22</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Start Test CTA */}
+            <button className="start-test-btn" onClick={handleStartTestClick}>
+              {sessionId ? "Resume Test" : "Start Test"}
             </button>
           </div>
         </div>
-      </div>
+      </main>
 
-      {/* Bottom Action Buttons */}
-      <div className="bottom-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button
-          className="btn btn-primary"
-          disabled={!sessionId && (!studentName.trim() || !studentId.trim() || !cameraEnabled || !fullScreen || !screenShared || !folderSelected)}
-          onClick={async () => {
-            try {
-              if (window.athena?.checkMultipleDisplays) {
-                const hasMultiple = await window.athena.checkMultipleDisplays();
-                if (hasMultiple) {
-                  alert("Anti-Cheat Alert: Multiple displays detected. Please disconnect external monitors before starting the exam.");
-                  return;
-                }
-              }
+      {/* Permissions / Proctoring Setup Modal */}
+      {showPermissionsModal && (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div className="modal-header">
+              <h3>Kindly Allow Permissions to Start the Test</h3>
+              <button className="modal-close-btn" onClick={() => setShowPermissionsModal(false)}>×</button>
+            </div>
 
-              if (sessionId) {
-                setQuizStarted(true);
-                await window.athena.startTimerOnMain();
-              } else {
-                await startExamOnBackend();
-                await window.athena.startTimerOnMain();
-              }
-            } catch (error) {
-              console.error(error);
-            }
-          }}
-        >
-          {sessionId ? "Resume Test" : "Go To Test"}
-        </button>
+            {/* Candidate Details Step */}
+            <div className="permission-step">
+              <div className="permission-step-header">
+                <span className="permission-step-title">Candidate Details</span>
+                <span className={`permission-step-status ${studentName.trim() && studentId.trim() ? 'status-granted' : 'status-pending'}`}>
+                  {studentName.trim() && studentId.trim() ? 'Ready' : 'Required'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '8px' }}>
+                <input
+                  type="text"
+                  placeholder="Full Name"
+                  value={studentName}
+                  onChange={e => setStudentName(e.target.value)}
+                  style={{ flex: 1, minWidth: '180px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                />
+                <input
+                  type="text"
+                  placeholder="Student ID / Roll No."
+                  value={studentId}
+                  onChange={e => setStudentId(e.target.value)}
+                  style={{ flex: 1, minWidth: '180px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                />
+              </div>
+            </div>
 
-        <button 
-          className="btn btn-outline" 
-          style={{ color: '#dc2626', borderColor: '#fca5a5' }}
-          onClick={() => window.athena?.exitExam(true)}
-        >
-          Exit Exam
-        </button>
-      </div>
+            {/* Camera Permission Step */}
+            <div className="permission-step">
+              <div className="permission-step-header">
+                <span className="permission-step-title">1. Camera Access (Heimdall)</span>
+                <span className={`permission-step-status ${cameraEnabled ? 'status-granted' : 'status-pending'}`}>
+                  {cameraEnabled ? 'Connected' : 'Pending'}
+                </span>
+              </div>
+              <p style={{ fontSize: '12.5px', color: '#64748b', marginBottom: '10px' }}>
+                Proctoring requires active webcam monitoring throughout the exam.
+              </p>
+              <button className="btn btn-black btn-sm" disabled={cameraEnabled} onClick={getCameraAccess}>
+                {cameraEnabled ? 'Camera Connected ✓' : 'Enable Camera'}
+              </button>
+              {cameraEnabled && (
+                <video ref={videoRef} autoPlay playsInline className="video-thumb" />
+              )}
+            </div>
 
-      <div>
-        {formatTime(timer)} elapsed
-      </div>
+            {/* Screen Share Permission Step */}
+            <div className="permission-step">
+              <div className="permission-step-header">
+                <span className="permission-step-title">2. Screen Share Permission</span>
+                <span className={`permission-step-status ${screenShared ? 'status-granted' : 'status-pending'}`}>
+                  {screenShared ? 'Shared' : 'Pending'}
+                </span>
+              </div>
+              <p style={{ fontSize: '12.5px', color: '#64748b', marginBottom: '10px' }}>
+                Share your entire screen for automated compliance monitoring.
+              </p>
+              <button className="btn btn-black btn-sm" disabled={screenShared} onClick={getScreenAccess}>
+                {screenShared ? 'Screen Shared ✓' : 'Share Screen'}
+              </button>
+            </div>
 
-      <div style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap' }}>
-        <button className="btn btn-outline" onClick={() => {
-          saveVideoScreenShots()
-        }}>
-          Capture Snapshot
-        </button>
+            {/* Storage Folder Selection Step */}
+            <div className="permission-step">
+              <div className="permission-step-header">
+                <span className="permission-step-title">3. Proctoring Snapshot Directory</span>
+                <span className={`permission-step-status ${folderSelected ? 'status-granted' : 'status-pending'}`}>
+                  {folderSelected ? 'Selected' : 'Pending'}
+                </span>
+              </div>
+              <p style={{ fontSize: '12.5px', color: '#64748b', marginBottom: '10px' }}>
+                Choose where periodic monitoring snapshots are saved.
+              </p>
+              <button className="btn btn-black btn-sm" disabled={folderSelected} onClick={handleSelectFolder}>
+                {folderSelected ? 'Folder Selected ✓' : 'Select Folder'}
+              </button>
+            </div>
 
-        <button className="btn btn-outline" onClick={() => {
-          window.athena.showRules()
-        }}>
-          Show Native Rules
-        </button>
+            {/* Fullscreen Mode Step */}
+            <div className="permission-step">
+              <div className="permission-step-header">
+                <span className="permission-step-title">4. Full-Screen Mode</span>
+                <span className={`permission-step-status ${fullScreen ? 'status-granted' : 'status-pending'}`}>
+                  {fullScreen ? 'Active' : 'Pending'}
+                </span>
+              </div>
+              <p style={{ fontSize: '12.5px', color: '#64748b', marginBottom: '10px' }}>
+                Exam must be taken strictly in full-screen mode with external tabs closed.
+              </p>
+              <button className="btn btn-primary btn-sm" disabled={fullScreen} onClick={enableFullScreen}>
+                {fullScreen ? 'Full Screen Enabled ✓' : 'Enable Full Screen'}
+              </button>
+            </div>
 
-        <button className="btn btn-outline" onClick={() => setShowRulesModal(true)}>
-          Show In-App Rules
-        </button>
-      </div>
+            {/* Modal Bottom Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+              <button className="btn btn-outline btn-sm" onClick={() => setShowPermissionsModal(false)}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={!isPermissionsReady}
+                onClick={startExamOnBackend}
+              >
+                Launch Test
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
+      {/* Rules Modal */}
       {showRulesModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.65)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999,
-          padding: '20px'
-        }}>
-          <div style={{
-            backgroundColor: '#fff',
-            borderRadius: '16px',
-            maxWidth: '520px',
-            width: '100%',
-            padding: '28px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-          }}>
-            <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '16px', color: '#0f172a' }}>
-              Exam Rules & Regulations
-            </h3>
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div className="modal-header">
+              <h3>Athena Exam Rules & Guidelines</h3>
+              <button className="modal-close-btn" onClick={() => setShowRulesModal(false)}>×</button>
+            </div>
             <div style={{ fontSize: '14px', color: '#475569', lineHeight: '1.8', marginBottom: '24px' }}>
               <p>1. <strong>Full Screen:</strong> You must remain in full-screen mode throughout the exam.</p>
               <p>2. <strong>Camera & Screen Share:</strong> Web camera and screen monitoring must remain active.</p>
@@ -555,16 +732,15 @@ function App() {
               <p>5. <strong>Submission:</strong> Complete all questions and click Finish Exam when ready.</p>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button className="btn btn-primary" onClick={() => setShowRulesModal(false)}>
+              <button className="btn btn-primary btn-sm" onClick={() => setShowRulesModal(false)}>
                 I Understand
               </button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }
 
-export default App
+export default App;
