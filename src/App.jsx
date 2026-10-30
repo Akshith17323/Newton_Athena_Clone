@@ -83,10 +83,10 @@ function App() {
     };
   }, []);
 
-  // Save screenshots every 5 seconds when camera is enabled
+  // Save screenshots every 5 seconds when camera is enabled and quiz started
   useEffect(() => {
     let intervalId;
-    if (cameraEnabled) {
+    if (cameraEnabled && quizStarted) {
       intervalId = setInterval(() => {
         saveVideoScreenShots();
       }, 5000);
@@ -94,9 +94,11 @@ function App() {
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [cameraEnabled]);
+  }, [cameraEnabled, quizStarted]);
 
   async function saveVideoScreenShots() {
+    if (!sessionIdRef.current) return;
+    
     if (!videoRef.current || !videoRef.current.srcObject) {
       return;
     }
@@ -213,12 +215,17 @@ function App() {
             <p style={{ color: '#16a34a' }}>Correct: <strong>{examResults.correct}</strong></p>
             <p style={{ color: '#dc2626' }}>Wrong: <strong>{examResults.wrong}</strong></p>
           </div>
-          <button className="btn btn-primary" style={{ marginTop: '32px' }} onClick={() => {
-            setExamResults(null);
-            setSessionId(null);
-            setRestoredAnswers({});
-            localStorage.removeItem('athena_sessionId');
-          }}>Start New Exam</button>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '32px' }}>
+            <button className="btn btn-primary" onClick={() => {
+              setExamResults(null);
+              setSessionId(null);
+              setRestoredAnswers({});
+              localStorage.removeItem('athena_sessionId');
+            }}>Start New Exam</button>
+            <button className="btn btn-outline" style={{ color: '#dc2626', borderColor: '#fca5a5' }} onClick={() => {
+              window.athena?.exitExam(false);
+            }}>Exit Exam</button>
+          </div>
         </div>
       </div>
     );
@@ -334,7 +341,7 @@ function App() {
       </div>
 
       {/* Bottom Action Buttons */}
-      <div className="bottom-actions">
+      <div className="bottom-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button
           className="btn btn-primary"
           disabled={!cameraEnabled || !fullScreen || !screenShared || !folderSelected}
@@ -353,6 +360,14 @@ function App() {
           }}
         >
           {sessionId ? "Resume Test" : "Go To Test"}
+        </button>
+
+        <button 
+          className="btn btn-outline" 
+          style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+          onClick={() => window.athena?.exitExam(true)}
+        >
+          Exit Exam
         </button>
       </div>
 

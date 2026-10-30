@@ -9,7 +9,10 @@ export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
   // Fetch questions
   useEffect(() => {
     fetch('http://localhost:3000/exam/mcq')
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error("Failed to fetch");
+        return res.json();
+      })
       .then(data => setQuestions(data))
       .catch(err => console.error("Failed to fetch questions:", err));
   }, []);
@@ -88,7 +91,6 @@ export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
   }
 
   const currentQuestion = questions[currentIndex];
-  const isAnswered = answers[currentQuestion.id] !== undefined;
   const selectedOptIndex = answers[currentQuestion.id];
 
   return (
@@ -126,7 +128,16 @@ export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
       <div className="card-container" style={{ flex: 1, textAlign: 'left', minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid #e2e8f0', paddingBottom: '16px' }}>
           <h2>Question {currentIndex + 1} of {questions.length}</h2>
-          <div style={{ fontWeight: 'bold', color: '#dc2626', fontSize: '18px' }}>Time: {timer}s</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ fontWeight: 'bold', color: '#dc2626', fontSize: '18px' }}>Time: {timer}s</div>
+            <button
+              className="btn btn-outline"
+              style={{ padding: '6px 14px', fontSize: '13px', color: '#dc2626', borderColor: '#fca5a5' }}
+              onClick={() => window.athena?.exitExam(true)}
+            >
+              Exit Exam
+            </button>
+          </div>
         </div>
         
         <div style={{ flex: 1 }}>

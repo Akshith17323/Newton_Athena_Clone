@@ -138,18 +138,43 @@ ipcMain.handle('capture-screen', async (_event, sessionId) => {
     }
 })
 
-ipcMain.on("show-rules", () => {
-    dialog.showMessageBox(electronWindow, {
+async function showRulesDialog() {
+    const response = await dialog.showMessageBox(electronWindow, {
         type: "info",
         title: "Athena Exam Rules",
-        message: "Exam Rules",
+        message: "Exam Rules & Guidelines",
         detail:
             "1. Stay on the exam screen.\n" +
             "2. Camera must remain enabled.\n" +
             "3. Do not leave the exam.\n" +
             "4. Do not use external assistance.\n" +
-            "5. Click Exit Exam when finished."
+            "5. Click Exit Exam when finished.",
+        buttons: ["I Agree", "Cancel"],
+        checkboxLabel: "I have read and agree to follow these rules",
+        checkboxChecked: false
     });
+
+    console.log("Clicked Button:", response.response === 0 ? "I Agree" : "Cancel", `(Index: ${response.response})`);
+    console.log("Checkbox selection:", response.checkboxChecked);
+
+    return response;
+}
+
+ipcMain.handle("show-rules", async () => {
+    return await showRulesDialog();
+});
+
+ipcMain.on("show-rules", async () => {
+    await showRulesDialog();
+});
+
+ipcMain.handle("exit-exam", (_event, confirm = true) => {
+    if (confirm) {
+        attemptQuit();
+    } else {
+        forceQuit = true;
+        app.quit();
+    }
 });
 
 

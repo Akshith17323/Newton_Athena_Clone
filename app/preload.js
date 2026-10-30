@@ -44,7 +44,10 @@ contextBridge.exposeInMainWorld("athena", {
 
     // Functions related to showing Contest Rules in a new Dialog
     showRules: () => {
-        ipcRenderer.send("show-rules");
+        return ipcRenderer.invoke("show-rules");
+    },
+    exitExam: (confirm = true) => {
+        return ipcRenderer.invoke("exit-exam", confirm);
     },
     showMessageBox: () => {
         ipcRenderer.invoke("showMessageBox");
