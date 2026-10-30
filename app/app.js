@@ -51,13 +51,19 @@ function createWindow() {
         }
     })
 
+    const distPath = path.join(import.meta.dirname, '../dist/index.html');
     if (app.isPackaged) {
-        electronWindow.loadFile(path.join(import.meta.dirname, '../dist/index.html'));
+        electronWindow.loadFile(distPath);
     } else {
-        electronWindow.loadURL('http://localhost:5173');
+        electronWindow.loadURL('http://localhost:5173').catch(() => {
+            console.log("Vite dev server not running on http://localhost:5173, falling back to dist/index.html");
+            if (fs.existsSync(distPath)) {
+                electronWindow.loadFile(distPath);
+            }
+        });
     }
 
-    console.log("WebContents:", electronWindow.webContents);
+    console.log("WebContents initialized with ID:", electronWindow.webContents.id);
 
     Menu.setApplicationMenu(null);
 
