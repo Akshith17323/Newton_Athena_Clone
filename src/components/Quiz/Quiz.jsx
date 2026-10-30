@@ -9,7 +9,7 @@ function formatTime(totalSeconds) {
   return `${String(mins).padStart(2, '0')}:${String(remainingSecs).padStart(2, '0')}`;
 }
 
-export default function Quiz({ sessionId, studentName, studentId, timer, restoredAnswers, onFinish }) {
+export default function Quiz({ sessionId, studentName, studentId, timer, violationCount = 0, restoredAnswers, onFinish }) {
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState(restoredAnswers || {});
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -145,6 +145,11 @@ export default function Quiz({ sessionId, studentName, studentId, timer, restore
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid #e2e8f0', paddingBottom: '16px' }}>
           <h2>Question {currentIndex + 1} of {questions.length}</h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {violationCount > 0 && (
+              <div style={{ backgroundColor: '#fef3c7', color: '#b45309', padding: '4px 10px', borderRadius: '6px', fontSize: '13px', fontWeight: '600', border: '1px solid #fde68a' }}>
+                Warnings: {violationCount}
+              </div>
+            )}
             <div style={{ fontWeight: 'bold', color: '#dc2626', fontSize: '18px' }}>Time: {formatTime(timer)}</div>
             <button
               className="btn btn-outline"

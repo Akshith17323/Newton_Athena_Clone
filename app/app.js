@@ -64,12 +64,31 @@ function createWindow() {
     electronWindow.webContents.on('before-input-event', (event, input) => {
         electronWindow.webContents.send('keyboard-input', input);
         
+        const key = input.key ? input.key.toLowerCase() : '';
+
+        // Block reload, developer tools, view-source, print, and full screen toggle keys
+        if (
+            key === 'f5' || 
+            key === 'f11' || 
+            key === 'f12' || 
+            ((input.control || input.meta) && (key === 'r' || key === 'u' || key === 'p' || key === 'i'))
+        ) {
+            event.preventDefault();
+            return;
+        }
+
         // Prevent keybinds like copy/paste
         if (input.control || input.meta) {
             event.preventDefault();
-            if (input.key.toLowerCase() === 'q') {
+            if (key === 'q') {
                 attemptQuit();
             }
+        }
+    });
+
+    electronWindow.on('blur', () => {
+        if (electronWindow && !electronWindow.isDestroyed()) {
+            electronWindow.webContents.send('window-blur');
         }
     });
 
@@ -80,6 +99,10 @@ function createWindow() {
         }
     });
 }
+
+ipcMain.handle('check-multiple-displays', () => {
+    return screen.getAllDisplays().length > 1;
+});
 
 ipcMain.handle('start-timer', () => {
     clearExamIntervals();

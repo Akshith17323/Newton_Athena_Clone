@@ -16,6 +16,7 @@ function App() {
   // state variables
   const [studentName, setStudentName] = useState(() => localStorage.getItem('athena_studentName') || '');
   const [studentId, setStudentId] = useState(() => localStorage.getItem('athena_studentId') || '');
+  const [violationCount, setViolationCount] = useState(0);
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [screenShared, setScreenShared] = useState(false);
   const [folderSelected, setFolderSelected] = useState(false);
@@ -75,6 +76,33 @@ function App() {
     }
   }, []);
 
+  // Disable context menu for anti-cheat
+  useEffect(() => {
+    const handleContextMenu = (e) => e.preventDefault();
+    window.addEventListener('contextmenu', handleContextMenu);
+    return () => window.removeEventListener('contextmenu', handleContextMenu);
+  }, []);
+
+  // Detect fullscreen exit
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setFullScreen(false);
+        if (quizStarted) {
+          setViolationCount((c) => {
+            const next = c + 1;
+            alert(`Anti-Cheat Warning: Fullscreen mode was exited! (Violation #${next})`);
+            return next;
+          });
+        }
+      } else {
+        setFullScreen(true);
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, [quizStarted]);
+
   useEffect(() => {
     // Register Listener for handling Timer Tick from Main
     const removeTimerTickListener = window.athena.registerListenerForTimerTickFromMain(setTimer);
@@ -87,12 +115,24 @@ function App() {
       console.log("Keyboard input intercepted from main:", input);
     });
 
+    // Register Listener for window blur (anti-cheat focus loss)
+    const removeWindowBlurListener = window.athena?.registerListenerForWindowBlur?.(() => {
+      if (quizStarted) {
+        setViolationCount((c) => {
+          const next = c + 1;
+          alert(`Anti-Cheat Warning: Window focus lost or external app selected! (Violation #${next})`);
+          return next;
+        });
+      }
+    });
+
     return () => {
-      removeTimerTickListener()
-      removeCameraSnapListener()
-      removeKeyboardListener()
+      removeTimerTickListener();
+      removeCameraSnapListener();
+      removeKeyboardListener();
+      if (removeWindowBlurListener) removeWindowBlurListener();
     };
-  }, []);
+  }, [quizStarted]);
 
   async function saveVideoScreenShots() {
     if (!sessionIdRef.current) return;
@@ -181,6 +221,14 @@ function App() {
       return;
     }
 
+    if (window.athena?.checkMultipleDisplays) {
+      const hasMultiple = await window.athena.checkMultipleDisplays();
+      if (hasMultiple) {
+        alert("Anti-Cheat Alert: Multiple displays detected. Please disconnect external monitors before starting the exam.");
+        return;
+      }
+    }
+
     try {
       localStorage.setItem('athena_studentName', studentName.trim());
       localStorage.setItem('athena_studentId', studentId.trim());
@@ -225,6 +273,11 @@ function App() {
             <p>Attempted: <strong>{examResults.attempted}</strong></p>
             <p style={{ color: '#16a34a' }}>Correct: <strong>{examResults.correct}</strong></p>
             <p style={{ color: '#dc2626' }}>Wrong: <strong>{examResults.wrong}</strong></p>
+            {violationCount > 0 && (
+              <p style={{ color: '#d97706', marginTop: '8px' }}>
+                Proctoring Warnings: <strong>{violationCount}</strong>
+              </p>
+            )}
           </div>
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '32px' }}>
             <button className="btn btn-primary" onClick={() => {
@@ -257,6 +310,7 @@ function App() {
           studentName={studentName}
           studentId={studentId}
           timer={timer} 
+          violationCount={violationCount}
           restoredAnswers={restoredAnswers} 
           onFinish={(results) => {
             window.athena?.stopTimerOnMain?.();
@@ -413,6 +467,14 @@ function App() {
           disabled={!sessionId && (!studentName.trim() || !studentId.trim() || !cameraEnabled || !fullScreen || !screenShared || !folderSelected)}
           onClick={async () => {
             try {
+              if (window.athena?.checkMultipleDisplays) {
+                const hasMultiple = await window.athena.checkMultipleDisplays();
+                if (hasMultiple) {
+                  alert("Anti-Cheat Alert: Multiple displays detected. Please disconnect external monitors before starting the exam.");
+                  return;
+                }
+              }
+
               if (sessionId) {
                 setQuizStarted(true);
                 await window.athena.startTimerOnMain();

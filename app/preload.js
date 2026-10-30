@@ -20,6 +20,17 @@ contextBridge.exposeInMainWorld("athena", {
         return ipcRenderer.invoke('stop-timer');
     },
 
+    checkMultipleDisplays: () => {
+        return ipcRenderer.invoke('check-multiple-displays');
+    },
+    registerListenerForWindowBlur: (callback) => {
+        const fn = () => callback();
+        ipcRenderer.on('window-blur', fn);
+        return () => {
+            ipcRenderer.removeListener('window-blur', fn);
+        };
+    },
+
     // New Preload Functions
     registerListenerForKeyboardInputFromMain: (callback) => {
         const fn = (event, message) => callback(message);
