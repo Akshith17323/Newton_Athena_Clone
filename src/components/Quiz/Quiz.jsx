@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react';
 
-export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
+function formatTime(totalSeconds) {
+  if (totalSeconds === null || totalSeconds === undefined || totalSeconds === '') return '00:00';
+  const sec = typeof totalSeconds === 'number' ? totalSeconds : parseInt(totalSeconds, 10);
+  if (isNaN(sec)) return '00:00';
+  const mins = Math.floor(sec / 60);
+  const remainingSecs = sec % 60;
+  return `${String(mins).padStart(2, '0')}:${String(remainingSecs).padStart(2, '0')}`;
+}
+
+export default function Quiz({ sessionId, studentName, studentId, timer, violationCount = 0, restoredAnswers, onFinish }) {
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState(restoredAnswers || {});
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -9,7 +18,10 @@ export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
   // Fetch questions
   useEffect(() => {
     fetch('http://localhost:3000/exam/mcq')
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error("Failed to fetch");
+        return res.json();
+      })
       .then(data => setQuestions(data))
       .catch(err => console.error("Failed to fetch questions:", err));
   }, []);
@@ -88,7 +100,6 @@ export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
   }
 
   const currentQuestion = questions[currentIndex];
-  const isAnswered = answers[currentQuestion.id] !== undefined;
   const selectedOptIndex = answers[currentQuestion.id];
 
   return (
@@ -120,13 +131,34 @@ export default function Quiz({ sessionId, timer, restoredAnswers, onFinish }) {
             )
           })}
         </div>
+        {(studentName || studentId) && (
+          <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #e2e8f0', fontSize: '12px', color: '#64748b' }}>
+            <div style={{ fontWeight: '600', color: '#0f172a', marginBottom: '4px' }}>Candidate</div>
+            {studentName && <div style={{ wordBreak: 'break-word' }}>{studentName}</div>}
+            {studentId && <div style={{ color: '#94a3b8' }}>ID: {studentId}</div>}
+          </div>
+        )}
       </div>
 
       {/* Main Question Area */}
       <div className="card-container" style={{ flex: 1, textAlign: 'left', minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid #e2e8f0', paddingBottom: '16px' }}>
           <h2>Question {currentIndex + 1} of {questions.length}</h2>
-          <div style={{ fontWeight: 'bold', color: '#dc2626', fontSize: '18px' }}>Time: {timer}s</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {violationCount > 0 && (
+              <div style={{ backgroundColor: '#fef3c7', color: '#b45309', padding: '4px 10px', borderRadius: '6px', fontSize: '13px', fontWeight: '600', border: '1px solid #fde68a' }}>
+                Warnings: {violationCount}
+              </div>
+            )}
+            <div style={{ fontWeight: 'bold', color: '#dc2626', fontSize: '18px' }}>Time: {formatTime(timer)}</div>
+            <button
+              className="btn btn-outline"
+              style={{ padding: '6px 14px', fontSize: '13px', color: '#dc2626', borderColor: '#fca5a5' }}
+              onClick={() => window.athena?.exitExam(true)}
+            >
+              Exit Exam
+            </button>
+          </div>
         </div>
         
         <div style={{ flex: 1 }}>

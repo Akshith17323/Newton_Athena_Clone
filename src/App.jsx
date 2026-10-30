@@ -3,8 +3,20 @@ import { useEffect, useRef, useState } from 'react'
 import Quiz from './components/Quiz/Quiz'
 import './App.css'
 
+function formatTime(totalSeconds) {
+  if (totalSeconds === null || totalSeconds === undefined || totalSeconds === '') return '00:00';
+  const sec = typeof totalSeconds === 'number' ? totalSeconds : parseInt(totalSeconds, 10);
+  if (isNaN(sec)) return '00:00';
+  const mins = Math.floor(sec / 60);
+  const remainingSecs = sec % 60;
+  return `${String(mins).padStart(2, '0')}:${String(remainingSecs).padStart(2, '0')}`;
+}
+
 function App() {
   // state variables
+  const [studentName, setStudentName] = useState(() => localStorage.getItem('athena_studentName') || '');
+  const [studentId, setStudentId] = useState(() => localStorage.getItem('athena_studentId') || '');
+  const [violationCount, setViolationCount] = useState(0);
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [screenShared, setScreenShared] = useState(false);
   const [folderSelected, setFolderSelected] = useState(false);
@@ -19,6 +31,7 @@ function App() {
   }, [sessionId]);
 
   const [quizStarted, setQuizStarted] = useState(false);
+  const [showRulesModal, setShowRulesModal] = useState(false);
   const [restoredAnswers, setRestoredAnswers] = useState({});
   const [examResults, setExamResults] = useState(null);
   // ref variables
@@ -64,6 +77,33 @@ function App() {
     }
   }, []);
 
+  // Disable context menu for anti-cheat
+  useEffect(() => {
+    const handleContextMenu = (e) => e.preventDefault();
+    window.addEventListener('contextmenu', handleContextMenu);
+    return () => window.removeEventListener('contextmenu', handleContextMenu);
+  }, []);
+
+  // Detect fullscreen exit
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setFullScreen(false);
+        if (quizStarted) {
+          setViolationCount((c) => {
+            const next = c + 1;
+            alert(`Anti-Cheat Warning: Fullscreen mode was exited! (Violation #${next})`);
+            return next;
+          });
+        }
+      } else {
+        setFullScreen(true);
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, [quizStarted]);
+
   useEffect(() => {
     // Register Listener for handling Timer Tick from Main
     const removeTimerTickListener = window.athena.registerListenerForTimerTickFromMain(setTimer);
@@ -76,27 +116,28 @@ function App() {
       console.log("Keyboard input intercepted from main:", input);
     });
 
-    return () => {
-      removeTimerTickListener()
-      removeCameraSnapListener()
-      removeKeyboardListener()
-    };
-  }, []);
+    // Register Listener for window blur (anti-cheat focus loss)
+    const removeWindowBlurListener = window.athena?.registerListenerForWindowBlur?.(() => {
+      if (quizStarted) {
+        setViolationCount((c) => {
+          const next = c + 1;
+          alert(`Anti-Cheat Warning: Window focus lost or external app selected! (Violation #${next})`);
+          return next;
+        });
+      }
+    });
 
-  // Save screenshots every 5 seconds when camera is enabled
-  useEffect(() => {
-    let intervalId;
-    if (cameraEnabled) {
-      intervalId = setInterval(() => {
-        saveVideoScreenShots();
-      }, 5000);
-    }
     return () => {
-      if (intervalId) clearInterval(intervalId);
+      removeTimerTickListener();
+      removeCameraSnapListener();
+      removeKeyboardListener();
+      if (removeWindowBlurListener) removeWindowBlurListener();
     };
-  }, [cameraEnabled]);
+  }, [quizStarted]);
 
   async function saveVideoScreenShots() {
+    if (!sessionIdRef.current) return;
+    
     if (!videoRef.current || !videoRef.current.srcObject) {
       return;
     }
@@ -176,15 +217,31 @@ function App() {
   }
 
   async function startExamOnBackend() {
+    if (!studentName.trim() || !studentId.trim()) {
+      alert("Please enter both your Full Name and Student ID before proceeding.");
+      return;
+    }
+
+    if (window.athena?.checkMultipleDisplays) {
+      const hasMultiple = await window.athena.checkMultipleDisplays();
+      if (hasMultiple) {
+        alert("Anti-Cheat Alert: Multiple displays detected. Please disconnect external monitors before starting the exam.");
+        return;
+      }
+    }
+
     try {
+      localStorage.setItem('athena_studentName', studentName.trim());
+      localStorage.setItem('athena_studentId', studentId.trim());
+
       const response = await fetch('http://localhost:3000/exam/start', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          userId: "user-123", // Replace with real user input later
-          name: "Test User"
+          userId: studentId.trim(),
+          name: studentName.trim()
         })
       });
       const data = await response.json();
@@ -208,17 +265,32 @@ function App() {
       <div className="page-container">
         <div className="card-container" style={{ textAlign: 'center' }}>
           <h2>Exam Results</h2>
+          {studentName && (
+            <p style={{ color: '#64748b', marginTop: '6px', fontSize: '15px' }}>
+              Candidate: <strong>{studentName}</strong> {studentId ? `(${studentId})` : ''}
+            </p>
+          )}
           <div style={{ marginTop: '20px', fontSize: '18px' }}>
             <p>Attempted: <strong>{examResults.attempted}</strong></p>
             <p style={{ color: '#16a34a' }}>Correct: <strong>{examResults.correct}</strong></p>
             <p style={{ color: '#dc2626' }}>Wrong: <strong>{examResults.wrong}</strong></p>
+            {violationCount > 0 && (
+              <p style={{ color: '#d97706', marginTop: '8px' }}>
+                Proctoring Warnings: <strong>{violationCount}</strong>
+              </p>
+            )}
           </div>
-          <button className="btn btn-primary" style={{ marginTop: '32px' }} onClick={() => {
-            setExamResults(null);
-            setSessionId(null);
-            setRestoredAnswers({});
-            localStorage.removeItem('athena_sessionId');
-          }}>Start New Exam</button>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '32px' }}>
+            <button className="btn btn-primary" onClick={() => {
+              setExamResults(null);
+              setSessionId(null);
+              setRestoredAnswers({});
+              localStorage.removeItem('athena_sessionId');
+            }}>Start New Exam</button>
+            <button className="btn btn-outline" style={{ color: '#dc2626', borderColor: '#fca5a5' }} onClick={() => {
+              window.athena?.exitExam(false);
+            }}>Exit Exam</button>
+          </div>
         </div>
       </div>
     );
@@ -236,9 +308,13 @@ function App() {
         <Quiz 
           key={sessionId}
           sessionId={sessionId} 
+          studentName={studentName}
+          studentId={studentId}
           timer={timer} 
+          violationCount={violationCount}
           restoredAnswers={restoredAnswers} 
           onFinish={(results) => {
+            window.athena?.stopTimerOnMain?.();
             setExamResults(results);
             setQuizStarted(false);
           }} 
@@ -251,6 +327,58 @@ function App() {
     <div className="page-container">
       {/* Main Card */}
       <div className="card-container">
+        {/* Section 0: Candidate Details */}
+        <div className="permission-item">
+          <div className="permission-content" style={{ width: '100%' }}>
+            <h3>Candidate Details</h3>
+            <p>Enter your full name and student ID / roll number before starting.</p>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: '220px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#475569' }}>
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. John Doe"
+                  value={studentName}
+                  onChange={(e) => setStudentName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '14px',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: '220px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#475569' }}>
+                  Student ID / Roll No.
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. CS2026-001"
+                  value={studentId}
+                  onChange={(e) => setStudentId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '14px',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="divider"></div>
+
         {/* Section 1: Camera / Heimdall */}
         <div className="permission-item">
           <div className="permission-content">
@@ -334,12 +462,20 @@ function App() {
       </div>
 
       {/* Bottom Action Buttons */}
-      <div className="bottom-actions">
+      <div className="bottom-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button
           className="btn btn-primary"
-          disabled={!cameraEnabled || !fullScreen || !screenShared || !folderSelected}
+          disabled={!sessionId && (!studentName.trim() || !studentId.trim() || !cameraEnabled || !fullScreen || !screenShared || !folderSelected)}
           onClick={async () => {
             try {
+              if (window.athena?.checkMultipleDisplays) {
+                const hasMultiple = await window.athena.checkMultipleDisplays();
+                if (hasMultiple) {
+                  alert("Anti-Cheat Alert: Multiple displays detected. Please disconnect external monitors before starting the exam.");
+                  return;
+                }
+              }
+
               if (sessionId) {
                 setQuizStarted(true);
                 await window.athena.startTimerOnMain();
@@ -354,10 +490,18 @@ function App() {
         >
           {sessionId ? "Resume Test" : "Go To Test"}
         </button>
+
+        <button 
+          className="btn btn-outline" 
+          style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+          onClick={() => window.athena?.exitExam(true)}
+        >
+          Exit Exam
+        </button>
       </div>
 
       <div>
-        {timer + ' (s) elapsed'}
+        {formatTime(timer)} elapsed
       </div>
 
       <div style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap' }}>
@@ -373,10 +517,51 @@ function App() {
           Show Native Rules
         </button>
 
-        <button className="btn btn-outline" onClick={() => { alert("Rules ...") }}>
-          Show Chromium Rules
+        <button className="btn btn-outline" onClick={() => setShowRulesModal(true)}>
+          Show In-App Rules
         </button>
       </div>
+
+      {showRulesModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '16px',
+            maxWidth: '520px',
+            width: '100%',
+            padding: '28px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          }}>
+            <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '16px', color: '#0f172a' }}>
+              Exam Rules & Regulations
+            </h3>
+            <div style={{ fontSize: '14px', color: '#475569', lineHeight: '1.8', marginBottom: '24px' }}>
+              <p>1. <strong>Full Screen:</strong> You must remain in full-screen mode throughout the exam.</p>
+              <p>2. <strong>Camera & Screen Share:</strong> Web camera and screen monitoring must remain active.</p>
+              <p>3. <strong>Anti-Cheat:</strong> Tab switching, secondary displays, developer tools, and copy/paste are strictly blocked.</p>
+              <p>4. <strong>Automated Proctoring:</strong> Periodic webcam snaps and screen captures are saved for audit.</p>
+              <p>5. <strong>Submission:</strong> Complete all questions and click Finish Exam when ready.</p>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="btn btn-primary" onClick={() => setShowRulesModal(false)}>
+                I Understand
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

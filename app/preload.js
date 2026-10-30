@@ -16,6 +16,20 @@ contextBridge.exposeInMainWorld("athena", {
     startTimerOnMain: () => {
         return ipcRenderer.invoke('start-timer');
     },
+    stopTimerOnMain: () => {
+        return ipcRenderer.invoke('stop-timer');
+    },
+
+    checkMultipleDisplays: () => {
+        return ipcRenderer.invoke('check-multiple-displays');
+    },
+    registerListenerForWindowBlur: (callback) => {
+        const fn = () => callback();
+        ipcRenderer.on('window-blur', fn);
+        return () => {
+            ipcRenderer.removeListener('window-blur', fn);
+        };
+    },
 
     // New Preload Functions
     registerListenerForKeyboardInputFromMain: (callback) => {
@@ -44,18 +58,12 @@ contextBridge.exposeInMainWorld("athena", {
 
     // Functions related to showing Contest Rules in a new Dialog
     showRules: () => {
-        ipcRenderer.send("show-rules");
+        return ipcRenderer.invoke("show-rules");
     },
-    showMessageBox: () => {
-        ipcRenderer.invoke("showMessageBox");
+    exitExam: (confirm = true) => {
+        return ipcRenderer.invoke("exit-exam", confirm);
     },
-    selectFile: () => {
-        ipcRenderer.invoke("selectFile");
-    },
-    selectFolder() {
-        return ipcRenderer.invoke("selectFolder")
-    },
-    showSaveDialogBox() {
-        ipcRenderer.invoke("showSaveDialogBox");
-    },
+    selectFolder: () => {
+        return ipcRenderer.invoke("selectFolder");
+    }
 })
