@@ -63,16 +63,7 @@ contextBridge.exposeInMainWorld("athena", {
     exitExam: (confirm = true) => {
         return ipcRenderer.invoke("exit-exam", confirm);
     },
-    showMessageBox: () => {
-        ipcRenderer.invoke("showMessageBox");
-    },
-    selectFile: () => {
-        ipcRenderer.invoke("selectFile");
-    },
-    selectFolder() {
-        return ipcRenderer.invoke("selectFolder")
-    },
-    showSaveDialogBox() {
-        ipcRenderer.invoke("showSaveDialogBox");
-    },
+    selectFolder: () => {
+        return ipcRenderer.invoke("selectFolder");
+    }
 })

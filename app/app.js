@@ -248,40 +248,6 @@ app.whenReady().then(() => {
 });
 
 
-async function showMessageBox() {
-    const data = await dialog.showMessageBox({
-        type: 'info',
-        title: 'GuideLines for the exam',
-        message: 'We store your data \n We take your capture shots after every 5 seconds \n If you caught cheating your marks will be zero',
-        buttons: ['What Next', 'Go previous'],
-        checkboxChecked: true,
-        checkboxLabel: "Your are Ok with above guidelines"
-    })
-
-    console.log(data);
-    // response -> contains the index of the button
-    // checkboxChecked -> contains user clicks the button
-}
-
-
-ipcMain.handle("showMessageBox", async () => {
-    await showMessageBox();
-})
-
-// showOpenDialog box api can do lot of things can select files and folders
-async function selectFile() {
-    const response = await dialog.showOpenDialog({
-        properties: ['openFile'],
-        filters: [{
-            name: 'ALl files',
-            extensions: ['*']
-        }],
-    })
-
-    // check what does response have
-    console.log(response);
-}
-
 async function selectFolder() {
     const response = await dialog.showOpenDialog({
         title: 'Select the folder',
@@ -298,41 +264,6 @@ async function selectFolder() {
     return null;
 }
 
-ipcMain.handle("selectFile", async () => {
-    await selectFile();
-})
-
-
 ipcMain.handle("selectFolder", async () => {
     return await selectFolder();
-})
-
-
-async function showSaveDialogBox() {
-    const response = await dialog.showSaveDialog({
-        title: 'Where to save file',
-        message: 'Select the folder to save the file',
-        buttonLabel: 'Save as',
-        defaultPath: '/'
-    })
-
-    console.log(response);
-}
-
-
-ipcMain.handle("showSaveDialogBox", async () => {
-    await showSaveDialogBox();
-})
-
-
-
-
-
-// TASKS
-// Task 1
-// Add a Button to trigger a folder selection using the Dialog Box element.
-// All the Camera Snaps captured should be stored in this folder.
-
-// Task 2
-// Add Buttons and a Checkbox to the existing Rules Dialog Box.
-// console.log the Checkbox selection and Clicked Button.
+});

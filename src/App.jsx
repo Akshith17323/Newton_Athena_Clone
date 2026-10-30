@@ -31,6 +31,7 @@ function App() {
   }, [sessionId]);
 
   const [quizStarted, setQuizStarted] = useState(false);
+  const [showRulesModal, setShowRulesModal] = useState(false);
   const [restoredAnswers, setRestoredAnswers] = useState({});
   const [examResults, setExamResults] = useState(null);
   // ref variables
@@ -516,10 +517,51 @@ function App() {
           Show Native Rules
         </button>
 
-        <button className="btn btn-outline" onClick={() => { alert("Rules ...") }}>
-          Show Chromium Rules
+        <button className="btn btn-outline" onClick={() => setShowRulesModal(true)}>
+          Show In-App Rules
         </button>
       </div>
+
+      {showRulesModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '16px',
+            maxWidth: '520px',
+            width: '100%',
+            padding: '28px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          }}>
+            <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '16px', color: '#0f172a' }}>
+              Exam Rules & Regulations
+            </h3>
+            <div style={{ fontSize: '14px', color: '#475569', lineHeight: '1.8', marginBottom: '24px' }}>
+              <p>1. <strong>Full Screen:</strong> You must remain in full-screen mode throughout the exam.</p>
+              <p>2. <strong>Camera & Screen Share:</strong> Web camera and screen monitoring must remain active.</p>
+              <p>3. <strong>Anti-Cheat:</strong> Tab switching, secondary displays, developer tools, and copy/paste are strictly blocked.</p>
+              <p>4. <strong>Automated Proctoring:</strong> Periodic webcam snaps and screen captures are saved for audit.</p>
+              <p>5. <strong>Submission:</strong> Complete all questions and click Finish Exam when ready.</p>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="btn btn-primary" onClick={() => setShowRulesModal(false)}>
+                I Understand
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
