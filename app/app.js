@@ -225,7 +225,9 @@ ipcMain.handle("exit-exam", (_event, confirm = true) => {
 
 
 app.whenReady().then(() => {
-    const serverPath = path.join(import.meta.dirname, '../backend/server.js');
+    const serverPath = app.isPackaged
+        ? path.join(process.resourcesPath, 'backend', 'server.js')
+        : path.join(import.meta.dirname, '../backend/server.js');
     const sessionsPath = path.join(app.getPath('userData'), 'sessions.json');
     const backendProcess = fork(serverPath, [], {
         env: { ...process.env, SESSIONS_PATH: sessionsPath }

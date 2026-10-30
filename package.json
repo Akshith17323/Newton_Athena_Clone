@@ -16,6 +16,16 @@
     },
     "appId": "app.athena",
     "productName": "Athena",
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!node_modules/**"
+        ]
+      }
+    ],
     "win": {
       "target": "nsis",
       "icon": "public/icon.png"
