@@ -23,6 +23,16 @@ contextBridge.exposeInMainWorld("athena", {
     checkMultipleDisplays: () => {
         return ipcRenderer.invoke('check-multiple-displays');
     },
+    isFullScreen: () => {
+        return ipcRenderer.invoke('is-fullscreen');
+    },
+    registerListenerForFullscreenChange: (callback) => {
+        const fn = (_event, isFs) => callback(isFs);
+        ipcRenderer.on('fullscreen-change', fn);
+        return () => {
+            ipcRenderer.removeListener('fullscreen-change', fn);
+        };
+    },
     registerListenerForWindowBlur: (callback) => {
         const fn = () => callback();
         ipcRenderer.on('window-blur', fn);
