@@ -10,6 +10,7 @@ npm-debug.log*
 user-camera-snap
 user-screen-snap
 *.DS_Store
-.gitignore
 UPCOMING_FEATURES.md
+.gitignore
+
 

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="64" height="64" fill="none">
+  <!-- Shield Base -->
+  <path d="M16 3 L27 7 V14 C27 21 22 26.5 16 28.5 C10 26.5 5 21 5 14 V7 L16 3 Z" fill="#4f46e5" />
+  <!-- Proctoring Eye -->
+  <path d="M9 14.5 C11 11 13.5 9.5 16 9.5 C18.5 9.5 21 11 23 14.5 C21 18 18.5 19.5 16 19.5 C13.5 19.5 11 18 9 14.5 Z" stroke="#ffffff" stroke-width="1.8" stroke-linejoin="round" fill="none" />
+  <!-- Eye Pupil -->
+  <circle cx="16" cy="14.5" r="2.2" fill="#ffffff" />
+</svg>
