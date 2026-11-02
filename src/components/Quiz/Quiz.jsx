@@ -76,12 +76,36 @@ export default function Quiz({ sessionId, timer, violationCount = 0, restoredAns
     }
   }
 
-  function handleClearSelection(questionId) {
+  async function handleClearSelection(questionId) {
+    const previousAnswer = answers[questionId];
     setAnswers(prev => {
       const newAnswers = { ...prev };
       delete newAnswers[questionId];
       return newAnswers;
     });
+
+    try {
+      const res = await fetch('http://localhost:3000/exam/answer/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: sessionId,
+          questionId: questionId
+        })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        console.error("Failed to clear answer:", data.message);
+        if (previousAnswer !== undefined) {
+          setAnswers(prev => ({ ...prev, [questionId]: previousAnswer }));
+        }
+      }
+    } catch (err) {
+      console.error("Failed to clear answer on backend:", err);
+      if (previousAnswer !== undefined) {
+        setAnswers(prev => ({ ...prev, [questionId]: previousAnswer }));
+      }
+    }
   }
 
   function toggleMarkForReview(questionId) {

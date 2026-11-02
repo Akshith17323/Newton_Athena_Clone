@@ -132,34 +132,93 @@ app.post("/exam/answer", (req, res) => {
     (answer) => answer.questionId === Number(questionId)
   );
 
-  if (alreadyAnswered) {
-    return res.status(400).json({
-      message: "Question already answered",
-    });
-  }
-
   const isCorrect = Number(selectedAnswer) === question.correctAnswer;
 
-  session.answers.push({
-    questionId: question.id,
-    selectedAnswer: Number(selectedAnswer),
-    isCorrect,
-    answeredAt: new Date().toISOString(),
-  });
+  if (alreadyAnswered) {
+    // If the question was already answered, update it and re-calculate stats
+    if (alreadyAnswered.isCorrect) {
+      session.correct -= 1;
+    } else {
+      session.wrong -= 1;
+    }
 
-  session.attempted += 1;
+    alreadyAnswered.selectedAnswer = Number(selectedAnswer);
+    alreadyAnswered.isCorrect = isCorrect;
+    alreadyAnswered.answeredAt = new Date().toISOString();
 
-  if (isCorrect) {
-    session.correct += 1;
+    if (isCorrect) {
+      session.correct += 1;
+    } else {
+      session.wrong += 1;
+    }
   } else {
-    session.wrong += 1;
+    // First time answering this question
+    session.answers.push({
+      questionId: question.id,
+      selectedAnswer: Number(selectedAnswer),
+      isCorrect,
+      answeredAt: new Date().toISOString(),
+    });
+
+    session.attempted += 1;
+
+    if (isCorrect) {
+      session.correct += 1;
+    } else {
+      session.wrong += 1;
+    }
   }
 
   saveSessions(sessions);
 
   res.json({
-    message: "Answer saved",
+    message: alreadyAnswered ? "Answer updated" : "Answer saved",
     isCorrect,
+    attempted: session.attempted,
+    correct: session.correct,
+    wrong: session.wrong,
+  });
+});
+
+// Clear an existing answer for a question
+app.post("/exam/answer/clear", (req, res) => {
+  const { sessionId, questionId } = req.body;
+
+  if (!sessionId || questionId === undefined) {
+    return res.status(400).json({
+      message: "sessionId and questionId are required",
+    });
+  }
+
+  const sessions = readSessions();
+  const session = sessions.find((item) => item.sessionId === sessionId);
+
+  if (!session) {
+    return res.status(404).json({ message: "Session not found" });
+  }
+
+  if (session.status !== "in-progress") {
+    return res.status(400).json({ message: "Exam is already submitted" });
+  }
+
+  const answerIndex = session.answers.findIndex(
+    (answer) => answer.questionId === Number(questionId)
+  );
+
+  if (answerIndex !== -1) {
+    const previous = session.answers[answerIndex];
+    if (previous.isCorrect) {
+      session.correct -= 1;
+    } else {
+      session.wrong -= 1;
+    }
+    session.attempted -= 1;
+    session.answers.splice(answerIndex, 1);
+    saveSessions(sessions);
+  }
+
+  res.json({
+    message: "Answer cleared",
     attempted: session.attempted,
     correct: session.correct,
     wrong: session.wrong,
