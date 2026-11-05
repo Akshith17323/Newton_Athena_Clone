@@ -16,12 +16,18 @@
     },
     "appId": "app.athena",
     "productName": "Athena",
+    "files": [
+      "app/**/*",
+      "dist/**/*",
+      "package.json"
+    ],
     "extraResources": [
       {
         "from": "backend",
         "to": "backend",
         "filter": [
           "**/*",
+          "!data/sessions.json",
           "!node_modules/**"
         ]
       }

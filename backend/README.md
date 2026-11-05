@@ -14,6 +14,10 @@ exam-backend/
 ├── package.json
 ├── server.js
 └── README.md
+
+app/
+└── grading/
+    └── answer-key.json
 ```
 
 ## Setup
@@ -45,6 +49,10 @@ Question is returned
 POST /exam/answer
         ↓
 Attempt/correct/wrong are updated
+        ↓
+POST /exam/answer/clear (optional)
+        ↓
+An existing selection is removed
         ↓
 POST /exam/submit
         ↓
@@ -136,22 +144,48 @@ Example response:
 ```json
 {
   "message": "Answer saved",
-  "isCorrect": true,
-  "attempted": 1,
-  "correct": 1,
-  "wrong": 0
+  "attempted": 1
 }
 ```
 
-## 5. Check Session
+Submitting another option for the same `sessionId` and `questionId` updates the existing answer. It does not create a second attempt. The `attempted`, `correct`, and `wrong` totals are recalculated after every change.
+
+Correctness and live score totals are deliberately withheld while the exam is in progress. This prevents answer changes from being used to probe for the correct option.
+
+## 5. Clear One Answer
+
+```http
+POST /exam/answer/clear
+Content-Type: application/json
+```
+
+```json
+{
+  "sessionId": "session-1789830000000",
+  "questionId": 1
+}
+```
+
+Example response:
+
+```json
+{
+  "message": "Answer cleared",
+  "attempted": 0
+}
+```
+
+The route is idempotent. Clearing an unanswered question returns success without changing the totals.
+
+## 6. Check Session
 
 ```http
 GET /exam/session/session-1789830000000
 ```
 
-This returns the current exam progress.
+This returns the current exam progress and selected answers. While a session is in progress, it omits per-answer correctness and the `correct`/`wrong` totals. Final totals become available after submission.
 
-## 6. Submit Exam
+## 7. Submit Exam
 
 ```http
 POST /exam/submit
@@ -181,7 +215,9 @@ Example response:
 
 The frontend never receives `correctAnswer` when fetching a question.
 
-The backend keeps the correct answer inside `questions.json` and checks the submitted answer itself.
+The public `questions.json` file contains no correct answers. The backend loads the separate grading key through `ANSWER_KEY_PATH` and checks submitted answers itself.
+
+In packaged local builds, the grading key is stored inside `app.asar` instead of the externally visible `Resources/backend` directory. This is local hardening, not a complete security boundary; production exams should use a separately controlled remote grading service.
 
 That gives students the basic client/server idea:
 
@@ -206,8 +242,9 @@ Frontend             Backend
 The JSON files are acting as our database.
 
 ```text
-questions.json = question database
-sessions.json  = exam session database
+questions.json          = public question database
+app/grading/answer-key  = local grading data
+sessions.json           = exam session database
 ```
 
 Later these can be replaced with a real database without changing the basic API idea.

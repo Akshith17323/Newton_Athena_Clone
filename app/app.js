@@ -234,9 +234,32 @@ app.whenReady().then(() => {
     const serverPath = app.isPackaged
         ? path.join(process.resourcesPath, 'backend', 'server.js')
         : path.join(import.meta.dirname, '../backend/server.js');
+    const answerKeyPath = app.isPackaged
+        ? path.join(app.getAppPath(), 'app', 'grading', 'answer-key.json')
+        : path.join(import.meta.dirname, 'grading', 'answer-key.json');
     const sessionsPath = path.join(app.getPath('userData'), 'sessions.json');
+    const backendEnv = {
+        ...process.env,
+        ANSWER_KEY_PATH: answerKeyPath,
+        SESSIONS_PATH: sessionsPath
+    };
+
+    if (app.isPackaged) {
+        backendEnv.NODE_PATH = path.join(app.getAppPath(), 'node_modules');
+    }
+
     const backendProcess = fork(serverPath, [], {
-        env: { ...process.env, SESSIONS_PATH: sessionsPath }
+        env: backendEnv
+    });
+
+    backendProcess.on('error', (error) => {
+        console.error('Failed to start exam backend:', error);
+    });
+
+    backendProcess.on('exit', (code, signal) => {
+        if (!forceQuit && code !== 0) {
+            console.error(`Exam backend exited unexpectedly (code: ${code}, signal: ${signal})`);
+        }
     });
 
     app.on('will-quit', () => {

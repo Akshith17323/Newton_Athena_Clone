@@ -1,6 +1,7 @@
 // App.jsx
 import { useEffect, useRef, useState } from 'react'
 import Quiz from './components/Quiz/Quiz'
+import { API_BASE_URL, apiUrl } from './api'
 import './App.css'
 
 function formatTime(totalSeconds) {
@@ -49,7 +50,7 @@ function App() {
   useEffect(() => {
     const storedSessionId = localStorage.getItem('athena_sessionId');
     if (storedSessionId) {
-      fetch(`http://localhost:3000/exam/session/${storedSessionId}`)
+      fetch(apiUrl(`/exam/session/${storedSessionId}`))
         .then(res => {
           if (!res.ok) throw new Error("Session not found");
           return res.json();
@@ -234,7 +235,7 @@ function App() {
       localStorage.setItem('athena_studentName', studentName.trim());
       localStorage.setItem('athena_studentId', studentId.trim());
 
-      const response = await fetch('http://localhost:3000/exam/start', {
+      const response = await fetch(apiUrl('/exam/start'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -256,7 +257,7 @@ function App() {
       }
     } catch (error) {
       console.error("Network error:", error);
-      alert("Network error: " + error.message + " (Make sure the backend is running at localhost:3000!)");
+      alert(`Network error: ${error.message} (Make sure the backend is running at ${API_BASE_URL}!)`);
     }
   }
 

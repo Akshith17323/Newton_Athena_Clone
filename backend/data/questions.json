@@ -7,8 +7,7 @@
       "Main Process",
       "React Process",
       "Preload Process"
-    ],
-    "correctAnswer": 1
+    ]
   },
   {
     "id": 2,
@@ -18,8 +17,7 @@
       "BrowserWindow.loadURL",
       "fs.writeFileSync",
       "dialog.showMessageBox"
-    ],
-    "correctAnswer": 0
+    ]
   },
   {
     "id": 3,
@@ -29,8 +27,7 @@
       "To expose controlled APIs safely to the renderer",
       "To create the Express server",
       "To replace the main process"
-    ],
-    "correctAnswer": 1
+    ]
   },
   {
     "id": 4,
@@ -40,8 +37,7 @@
       "DELETE",
       "PATCH",
       "CONNECT"
-    ],
-    "correctAnswer": 0
+    ]
   },
   {
     "id": 5,
@@ -51,7 +47,6 @@
       "Writes data to a file and waits until it finishes",
       "Starts the Electron renderer",
       "Sends an IPC event"
-    ],
-    "correctAnswer": 1
+    ]
   }
 ]

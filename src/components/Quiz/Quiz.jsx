@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { apiUrl } from '../../api';
 
 function formatTime(totalSeconds) {
   if (totalSeconds === null || totalSeconds === undefined || totalSeconds === '') return '00:00';
@@ -14,10 +15,13 @@ export default function Quiz({ sessionId, studentName, studentId, timer, violati
   const [answers, setAnswers] = useState(restoredAnswers || {});
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingQuestionIds, setPendingQuestionIds] = useState(() => new Set());
+  const pendingQuestionIdsRef = useRef(new Set());
+  const isSubmittingRef = useRef(false);
 
   // Fetch questions
   useEffect(() => {
-    fetch('http://localhost:3000/exam/mcq')
+    fetch(apiUrl('/exam/mcq'))
       .then(res => {
         if (!res.ok) throw new Error("Failed to fetch");
         return res.json();
@@ -26,15 +30,47 @@ export default function Quiz({ sessionId, studentName, studentId, timer, violati
       .catch(err => console.error("Failed to fetch questions:", err));
   }, []);
 
+  function markQuestionPending(questionId, isPending) {
+    if (isPending) {
+      pendingQuestionIdsRef.current.add(questionId);
+    } else {
+      pendingQuestionIdsRef.current.delete(questionId);
+    }
+    setPendingQuestionIds(new Set(pendingQuestionIdsRef.current));
+  }
+
+  function restoreAnswer(questionId, previousAnswer) {
+    setAnswers(prev => {
+      const nextAnswers = { ...prev };
+      if (previousAnswer === undefined) {
+        delete nextAnswers[questionId];
+      } else {
+        nextAnswers[questionId] = previousAnswer;
+      }
+      return nextAnswers;
+    });
+  }
+
+  async function responseData(response) {
+    try {
+      return await response.json();
+    } catch {
+      return { message: `Request failed with status ${response.status}` };
+    }
+  }
+
   async function handleAnswerSelect(questionId, selectedAnswerIndex) {
+    if (isSubmittingRef.current || pendingQuestionIdsRef.current.has(questionId)) return;
+
     // Save previous answer to revert in case of failure
     const previousAnswer = answers[questionId];
-    
+    markQuestionPending(questionId, true);
+
     // Optimistically update UI
     setAnswers(prev => ({ ...prev, [questionId]: selectedAnswerIndex }));
 
     try {
-      const res = await fetch('http://localhost:3000/exam/answer', {
+      const res = await fetch(apiUrl('/exam/answer'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -43,54 +79,78 @@ export default function Quiz({ sessionId, studentName, studentId, timer, violati
           selectedAnswer: selectedAnswerIndex
         })
       });
-      const data = await res.json();
+      const data = await responseData(res);
       if (!res.ok) {
         console.error("Failed to submit answer:", data.message);
         alert(data.message);
-        // Revert on API error
-        setAnswers(prev => {
-          const newAnswers = { ...prev };
-          if (previousAnswer === undefined) {
-            delete newAnswers[questionId];
-          } else {
-            newAnswers[questionId] = previousAnswer;
-          }
-          return newAnswers;
-        });
+        restoreAnswer(questionId, previousAnswer);
       }
     } catch (err) {
       console.error("Network error submitting answer:", err);
-      // Revert on network error
-      setAnswers(prev => {
-        const newAnswers = { ...prev };
-        if (previousAnswer === undefined) {
-          delete newAnswers[questionId];
-        } else {
-          newAnswers[questionId] = previousAnswer;
-        }
-        return newAnswers;
+      alert("Could not save the answer. Please check the backend connection and try again.");
+      restoreAnswer(questionId, previousAnswer);
+    } finally {
+      markQuestionPending(questionId, false);
+    }
+  }
+
+  async function handleClearAnswer(questionId) {
+    if (isSubmittingRef.current || pendingQuestionIdsRef.current.has(questionId)) return;
+
+    const previousAnswer = answers[questionId];
+    if (previousAnswer === undefined) return;
+
+    markQuestionPending(questionId, true);
+    restoreAnswer(questionId, undefined);
+
+    try {
+      const res = await fetch(apiUrl('/exam/answer/clear'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, questionId })
       });
+      const data = await responseData(res);
+      if (!res.ok) {
+        console.error("Failed to clear answer:", data.message);
+        alert(data.message);
+        restoreAnswer(questionId, previousAnswer);
+      }
+    } catch (err) {
+      console.error("Network error clearing answer:", err);
+      alert("Could not clear the answer. Please check the backend connection and try again.");
+      restoreAnswer(questionId, previousAnswer);
+    } finally {
+      markQuestionPending(questionId, false);
     }
   }
 
   async function submitExamOnBackend() {
-    if (isSubmitting) return;
+    if (isSubmittingRef.current) return;
+    if (pendingQuestionIdsRef.current.size > 0) {
+      alert("Please wait for the current answer to finish saving.");
+      return;
+    }
+
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     try {
-      const res = await fetch('http://localhost:3000/exam/submit', {
+      const res = await fetch(apiUrl('/exam/submit'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId })
       });
-      const data = await res.json();
+      const data = await responseData(res);
       if (res.ok) {
         onFinish(data.result);
       } else {
         alert("Failed to submit exam: " + data.message);
+        isSubmittingRef.current = false;
         setIsSubmitting(false);
       }
     } catch (err) {
       console.error("Failed to submit exam:", err);
+      alert("Could not submit the exam. Please check the backend connection and try again.");
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   }
@@ -101,6 +161,7 @@ export default function Quiz({ sessionId, studentName, studentId, timer, violati
 
   const currentQuestion = questions[currentIndex];
   const selectedOptIndex = answers[currentQuestion.id];
+  const currentQuestionPending = pendingQuestionIds.has(currentQuestion.id);
 
   return (
     <div className="page-container" style={{ display: 'flex', gap: '24px', maxWidth: '1000px', margin: '0 auto', alignItems: 'flex-start' }}>
@@ -173,7 +234,7 @@ export default function Quiz({ sessionId, studentName, studentId, timer, violati
               let bgColor = '#fff';
               let borderColor = '#e2e8f0';
               let textColor = '#334155';
-              let cursorStyle = 'pointer';
+              let cursorStyle = currentQuestionPending || isSubmitting ? 'not-allowed' : 'pointer';
 
               if (isThisSelected) {
                 bgColor = '#eff6ff'; // light blue
@@ -182,9 +243,16 @@ export default function Quiz({ sessionId, studentName, studentId, timer, violati
               }
 
               return (
-                <div 
+                <div
                   key={optIdx} 
-                  onClick={() => handleAnswerSelect(currentQuestion.id, optIdx)}
+                  onClick={() => {
+                    if (!currentQuestionPending && !isSubmitting) {
+                      handleAnswerSelect(currentQuestion.id, optIdx);
+                    }
+                  }}
+                  role="radio"
+                  aria-checked={isThisSelected}
+                  aria-disabled={currentQuestionPending || isSubmitting}
                   style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
@@ -194,6 +262,7 @@ export default function Quiz({ sessionId, studentName, studentId, timer, violati
                     backgroundColor: bgColor,
                     color: textColor,
                     cursor: cursorStyle,
+                    opacity: currentQuestionPending || isSubmitting ? 0.7 : 1,
                     transition: 'all 0.2s ease',
                   }}
                 >
@@ -216,6 +285,17 @@ export default function Quiz({ sessionId, studentName, studentId, timer, violati
               )
             })}
           </div>
+
+          {selectedOptIndex !== undefined && (
+            <button
+              className="btn btn-outline"
+              style={{ marginTop: '16px', color: '#dc2626', borderColor: '#fca5a5' }}
+              onClick={() => handleClearAnswer(currentQuestion.id)}
+              disabled={currentQuestionPending || isSubmitting}
+            >
+              {currentQuestionPending ? 'Saving...' : 'Clear Selection'}
+            </button>
+          )}
         </div>
 
         {/* Navigation Buttons */}
@@ -239,14 +319,14 @@ export default function Quiz({ sessionId, studentName, studentId, timer, violati
             <button 
               className="btn btn-primary" 
               style={{ 
-                backgroundColor: isSubmitting ? '#9ca3af' : '#10b981', 
-                borderColor: isSubmitting ? '#9ca3af' : '#10b981',
-                cursor: isSubmitting ? 'not-allowed' : 'pointer'
+                backgroundColor: isSubmitting || pendingQuestionIds.size > 0 ? '#9ca3af' : '#10b981',
+                borderColor: isSubmitting || pendingQuestionIds.size > 0 ? '#9ca3af' : '#10b981',
+                cursor: isSubmitting || pendingQuestionIds.size > 0 ? 'not-allowed' : 'pointer'
               }} 
               onClick={submitExamOnBackend}
-              disabled={isSubmitting}
+              disabled={isSubmitting || pendingQuestionIds.size > 0}
             >
-              {isSubmitting ? 'Submitting...' : 'Finish Exam'}
+              {isSubmitting ? 'Submitting...' : pendingQuestionIds.size > 0 ? 'Saving Answer...' : 'Finish Exam'}
             </button>
           )}
         </div>
