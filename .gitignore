@@ -11,6 +11,4 @@ user-camera-snap
 user-screen-snap
 *.DS_Store
 UPCOMING_FEATURES.md
-.gitignore
-
-
+KNOWN_ISSUES.md

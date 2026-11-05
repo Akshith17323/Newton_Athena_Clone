@@ -7,8 +7,7 @@
       "It keeps a separate cell state and uses three gates",
       "It reads sequences in both directions by design",
       "It merges cell and hidden states, using two gates"
-    ],
-    "correctAnswer": 3
+    ]
   },
   {
     "id": 2,
@@ -18,8 +17,7 @@
       "To compute the candidate hidden state using a ReLU activation",
       "To regulate how much of the current input is written into long-term memory",
       "To filter the output activations before passing to the next layer"
-    ],
-    "correctAnswer": 0
+    ]
   },
   {
     "id": 3,
@@ -29,8 +27,7 @@
       "Reset Gate and Update Gate",
       "Forget Gate and Memory Gate",
       "Candidate Gate and Retention Gate"
-    ],
-    "correctAnswer": 1
+    ]
   },
   {
     "id": 4,
@@ -40,7 +37,6 @@
       "They use linear additive gradient highways through the cell state over time steps",
       "They restrict all weight matrices to be strictly orthogonal during training",
       "They eliminate recurrent connections between consecutive hidden states"
-    ],
-    "correctAnswer": 1
+    ]
   }
 ]

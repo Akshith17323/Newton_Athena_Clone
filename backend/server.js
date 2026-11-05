@@ -4,16 +4,24 @@ const fs = require("fs");
 const path = require("path");
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.HOST || "127.0.0.1";
 
 app.use(cors());
 app.use(express.json());
 
 const questionsPath = path.join(__dirname, "data", "questions.json");
+const answerKeyPath = process.env.ANSWER_KEY_PATH || path.join(__dirname, "..", "app", "grading", "answer-key.json");
 const sessionsPath = process.env.SESSIONS_PATH || path.join(__dirname, "data", "sessions.json");
 
 function readQuestions() {
-  return JSON.parse(fs.readFileSync(questionsPath, "utf-8"));
+  const questions = JSON.parse(fs.readFileSync(questionsPath, "utf-8"));
+  const answerKey = JSON.parse(fs.readFileSync(answerKeyPath, "utf-8"));
+
+  return questions.map((question) => ({
+    ...question,
+    correctAnswer: answerKey[String(question.id)],
+  }));
 }
 
 function readSessions() {
@@ -35,6 +43,47 @@ function questionForStudent(question) {
     question: question.question,
     options: question.options,
   };
+}
+
+function sessionForStudent(session) {
+  const studentSession = {
+    sessionId: session.sessionId,
+    userId: session.userId,
+    name: session.name,
+    startedAt: session.startedAt,
+    submittedAt: session.submittedAt,
+    status: session.status,
+    attempted: session.attempted,
+    answers: session.answers.map((answer) => ({
+      questionId: answer.questionId,
+      selectedAnswer: answer.selectedAnswer,
+      answeredAt: answer.answeredAt,
+    })),
+  };
+
+  if (session.status === "submitted") {
+    studentSession.correct = session.correct;
+    studentSession.wrong = session.wrong;
+  }
+
+  return studentSession;
+}
+
+function refreshSessionStats(session) {
+  session.attempted = session.answers.length;
+  session.correct = session.answers.filter((answer) => answer.isCorrect).length;
+  session.wrong = session.attempted - session.correct;
+}
+
+function parseQuestionId(value) {
+  const questionId = Number(value);
+  return Number.isInteger(questionId) ? questionId : null;
+}
+
+function validateSelectedAnswer(selectedAnswer, question) {
+  return Number.isInteger(selectedAnswer)
+    && selectedAnswer >= 0
+    && selectedAnswer < question.options.length;
 }
 
 app.get("/", (req, res) => {
@@ -95,7 +144,7 @@ app.get("/exam/mcq", (req, res) => {
   res.json(questions.map(questionForStudent));
 });
 
-// Submit one answer
+// Save or update one answer
 app.post("/exam/answer", (req, res) => {
   const { sessionId, questionId, selectedAnswer } = req.body;
 
@@ -105,12 +154,16 @@ app.post("/exam/answer", (req, res) => {
     });
   }
 
+  const parsedQuestionId = parseQuestionId(questionId);
+
+  if (parsedQuestionId === null) {
+    return res.status(400).json({ message: "questionId must be an integer" });
+  }
+
   const questions = readQuestions();
   const sessions = readSessions();
 
-  const question = questions.find(
-    (item) => item.id === Number(questionId)
-  );
+  const question = questions.find((item) => item.id === parsedQuestionId);
 
   if (!question) {
     return res.status(404).json({ message: "Question not found" });
@@ -128,59 +181,41 @@ app.post("/exam/answer", (req, res) => {
     return res.status(400).json({ message: "Exam is already submitted" });
   }
 
-  const alreadyAnswered = session.answers.find(
-    (answer) => answer.questionId === Number(questionId)
-  );
-
-  const isCorrect = Number(selectedAnswer) === question.correctAnswer;
-
-  if (alreadyAnswered) {
-    // If the question was already answered, update it and re-calculate stats
-    if (alreadyAnswered.isCorrect) {
-      session.correct -= 1;
-    } else {
-      session.wrong -= 1;
-    }
-
-    alreadyAnswered.selectedAnswer = Number(selectedAnswer);
-    alreadyAnswered.isCorrect = isCorrect;
-    alreadyAnswered.answeredAt = new Date().toISOString();
-
-    if (isCorrect) {
-      session.correct += 1;
-    } else {
-      session.wrong += 1;
-    }
-  } else {
-    // First time answering this question
-    session.answers.push({
-      questionId: question.id,
-      selectedAnswer: Number(selectedAnswer),
-      isCorrect,
-      answeredAt: new Date().toISOString(),
+  if (!validateSelectedAnswer(selectedAnswer, question)) {
+    return res.status(400).json({
+      message: `selectedAnswer must be an integer between 0 and ${question.options.length - 1}`,
     });
-
-    session.attempted += 1;
-
-    if (isCorrect) {
-      session.correct += 1;
-    } else {
-      session.wrong += 1;
-    }
   }
 
+  const isCorrect = selectedAnswer === question.correctAnswer;
+  const answeredAt = new Date().toISOString();
+  const existingAnswer = session.answers.find(
+    (answer) => answer.questionId === parsedQuestionId
+  );
+
+  if (existingAnswer) {
+    existingAnswer.selectedAnswer = selectedAnswer;
+    existingAnswer.isCorrect = isCorrect;
+    existingAnswer.answeredAt = answeredAt;
+  } else {
+    session.answers.push({
+      questionId: question.id,
+      selectedAnswer,
+      isCorrect,
+      answeredAt,
+    });
+  }
+
+  refreshSessionStats(session);
   saveSessions(sessions);
 
   res.json({
-    message: alreadyAnswered ? "Answer updated" : "Answer saved",
-    isCorrect,
+    message: existingAnswer ? "Answer updated" : "Answer saved",
     attempted: session.attempted,
-    correct: session.correct,
-    wrong: session.wrong,
   });
 });
 
-// Clear an existing answer for a question
+// Clear one answer
 app.post("/exam/answer/clear", (req, res) => {
   const { sessionId, questionId } = req.body;
 
@@ -188,6 +223,19 @@ app.post("/exam/answer/clear", (req, res) => {
     return res.status(400).json({
       message: "sessionId and questionId are required",
     });
+  }
+
+  const parsedQuestionId = parseQuestionId(questionId);
+
+  if (parsedQuestionId === null) {
+    return res.status(400).json({ message: "questionId must be an integer" });
+  }
+
+  const questions = readQuestions();
+  const question = questions.find((item) => item.id === parsedQuestionId);
+
+  if (!question) {
+    return res.status(404).json({ message: "Question not found" });
   }
 
   const sessions = readSessions();
@@ -202,26 +250,19 @@ app.post("/exam/answer/clear", (req, res) => {
   }
 
   const answerIndex = session.answers.findIndex(
-    (answer) => answer.questionId === Number(questionId)
+    (answer) => answer.questionId === parsedQuestionId
   );
 
   if (answerIndex !== -1) {
-    const previous = session.answers[answerIndex];
-    if (previous.isCorrect) {
-      session.correct -= 1;
-    } else {
-      session.wrong -= 1;
-    }
-    session.attempted -= 1;
     session.answers.splice(answerIndex, 1);
-    saveSessions(sessions);
   }
 
+  refreshSessionStats(session);
+  saveSessions(sessions);
+
   res.json({
-    message: "Answer cleared",
+    message: answerIndex === -1 ? "Answer was already clear" : "Answer cleared",
     attempted: session.attempted,
-    correct: session.correct,
-    wrong: session.wrong,
   });
 });
 
@@ -237,7 +278,7 @@ app.get("/exam/session/:sessionId", (req, res) => {
     return res.status(404).json({ message: "Session not found" });
   }
 
-  res.json(session);
+  res.json(sessionForStudent(session));
 });
 
 // Submit the whole exam
@@ -273,6 +314,6 @@ app.post("/exam/submit", (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Exam backend running at http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`Exam backend running at http://${HOST}:${PORT}`);
 });
