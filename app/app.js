@@ -98,6 +98,18 @@ function createWindow() {
         }
     });
 
+    electronWindow.on('enter-full-screen', () => {
+        if (electronWindow && !electronWindow.isDestroyed()) {
+            electronWindow.webContents.send('fullscreen-change', true);
+        }
+    });
+
+    electronWindow.on('leave-full-screen', () => {
+        if (electronWindow && !electronWindow.isDestroyed()) {
+            electronWindow.webContents.send('fullscreen-change', false);
+        }
+    });
+
     electronWindow.on('close', (e) => {
         if (!forceQuit) {
             e.preventDefault();
@@ -105,6 +117,10 @@ function createWindow() {
         }
     });
 }
+
+ipcMain.handle('is-fullscreen', () => {
+    return electronWindow ? electronWindow.isFullScreen() : false;
+});
 
 ipcMain.handle('check-multiple-displays', () => {
     return screen.getAllDisplays().length > 1;
