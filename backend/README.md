@@ -80,11 +80,11 @@ Content-Type: application/json
 ```json
 {
   "message": "Exam session started",
-  "sessionId": "session-1789830000000"
+  "sessionId": "session-550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
-Save this `sessionId` in the frontend. It identifies this particular exam attempt.
+Save this `sessionId` in the frontend. It is UUID-based and identifies this particular exam attempt.
 
 ## 2. Get One Question
 
@@ -124,7 +124,7 @@ Content-Type: application/json
 
 ```json
 {
-  "sessionId": "session-1789830000000",
+  "sessionId": "session-550e8400-e29b-41d4-a716-446655440000",
   "questionId": 1,
   "selectedAnswer": 1
 }
@@ -161,7 +161,7 @@ Content-Type: application/json
 
 ```json
 {
-  "sessionId": "session-1789830000000",
+  "sessionId": "session-550e8400-e29b-41d4-a716-446655440000",
   "questionId": 1
 }
 ```
@@ -180,7 +180,7 @@ The route is idempotent. Clearing an unanswered question returns success without
 ## 6. Check Session
 
 ```http
-GET /exam/session/session-1789830000000
+GET /exam/session/session-550e8400-e29b-41d4-a716-446655440000
 ```
 
 This returns the current exam progress and selected answers. While a session is in progress, it omits per-answer correctness and the `correct`/`wrong` totals. Final totals become available after submission.
@@ -194,7 +194,7 @@ Content-Type: application/json
 
 ```json
 {
-  "sessionId": "session-1789830000000"
+  "sessionId": "session-550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 

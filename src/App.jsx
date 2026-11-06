@@ -53,6 +53,14 @@ function App() {
           return res.json();
         })
         .then(data => {
+          if (data.name && data.userId) {
+            setStudentName(data.name);
+            setStudentId(data.userId);
+            setIsLoggedIn(true);
+            localStorage.setItem('athena_studentName', data.name);
+            localStorage.setItem('athena_studentId', data.userId);
+          }
+
           if (data.status === "in-progress") {
             setSessionId(storedSessionId);
             const newAnswers = {};
@@ -238,19 +246,25 @@ function App() {
     }
   }
 
+  async function hasValidDisplaySetup() {
+    if (!window.athena?.checkMultipleDisplays) return true;
+
+    const hasMultiple = await window.athena.checkMultipleDisplays();
+    if (hasMultiple) {
+      alert("Anti-Cheat Alert: Multiple displays detected. Please disconnect external monitors before starting the exam.");
+      return false;
+    }
+
+    return true;
+  }
+
   async function startExamOnBackend() {
     if (!studentName.trim() || !studentId.trim()) {
       alert("Please enter both your Full Name and Student ID.");
       return;
     }
 
-    if (window.athena?.checkMultipleDisplays) {
-      const hasMultiple = await window.athena.checkMultipleDisplays();
-      if (hasMultiple) {
-        alert("Anti-Cheat Alert: Multiple displays detected. Please disconnect external monitors before starting the exam.");
-        return;
-      }
-    }
+    if (!await hasValidDisplaySetup()) return;
 
     try {
       localStorage.setItem('athena_studentName', studentName.trim());
@@ -283,18 +297,31 @@ function App() {
 
   const isPermissionsReady = cameraEnabled && screenShared && folderSelected && fullScreen && studentName.trim() && studentId.trim();
 
-  function handleStartTestClick() {
-    if (sessionId) {
-      setQuizStarted(true);
-      window.athena?.startTimerOnMain?.();
+  async function resumeExamSession() {
+    if (!isPermissionsReady) {
+      setShowPermissionsModal(true);
       return;
     }
 
-    if (isPermissionsReady) {
-      startExamOnBackend();
-    } else {
+    if (!await hasValidDisplaySetup()) return;
+
+    setQuizStarted(true);
+    setShowPermissionsModal(false);
+    await window.athena?.startTimerOnMain?.();
+  }
+
+  function handleStartTestClick() {
+    if (!isPermissionsReady) {
       setShowPermissionsModal(true);
+      return;
     }
+
+    if (sessionId) {
+      resumeExamSession();
+      return;
+    }
+
+    startExamOnBackend();
   }
 
   // Get user initials for avatar
@@ -780,9 +807,9 @@ function App() {
               <button
                 className="btn btn-primary btn-sm"
                 disabled={!isPermissionsReady}
-                onClick={startExamOnBackend}
+                onClick={sessionId ? resumeExamSession : startExamOnBackend}
               >
-                Launch Test
+                {sessionId ? 'Resume Test' : 'Launch Test'}
               </button>
             </div>
           </div>
