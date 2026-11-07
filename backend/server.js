@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const { randomUUID } = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
@@ -33,8 +34,15 @@ function saveSessions(sessions) {
   fs.writeFileSync(sessionsPath, JSON.stringify(sessions, null, 2));
 }
 
-function makeSessionId() {
-  return `session-${Date.now()}`;
+function makeSessionId(sessions) {
+  const existingIds = new Set(sessions.map((session) => session.sessionId));
+  let sessionId;
+
+  do {
+    sessionId = `session-${randomUUID()}`;
+  } while (existingIds.has(sessionId));
+
+  return sessionId;
 }
 
 function questionForStudent(question) {
@@ -103,7 +111,7 @@ app.post("/exam/start", (req, res) => {
   const sessions = readSessions();
 
   const session = {
-    sessionId: makeSessionId(),
+    sessionId: makeSessionId(sessions),
     userId,
     name,
     startedAt: new Date().toISOString(),
