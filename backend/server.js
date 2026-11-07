@@ -1,15 +1,36 @@
 const express = require("express");
-const cors = require("cors");
-const { randomUUID } = require("crypto");
+const { randomUUID, timingSafeEqual } = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || "127.0.0.1";
+const API_TOKEN = process.env.API_TOKEN;
 
-app.use(cors());
-app.use(express.json());
+if (typeof API_TOKEN !== "string" || API_TOKEN.length < 32) {
+  throw new Error("API_TOKEN must be configured with at least 32 characters");
+}
+
+const expectedToken = Buffer.from(API_TOKEN);
+
+function authenticateRequest(req, res, next) {
+  const authorization = req.get("authorization") || "";
+  const [scheme, token] = authorization.split(" ");
+  const suppliedToken = Buffer.from(token || "");
+  const isValid = scheme === "Bearer"
+    && suppliedToken.length === expectedToken.length
+    && timingSafeEqual(suppliedToken, expectedToken);
+
+  if (!isValid) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  next();
+}
+
+app.use(authenticateRequest);
+app.use(express.json({ limit: "32kb" }));
 
 const questionsPath = path.join(__dirname, "data", "questions.json");
 const answerKeyPath = process.env.ANSWER_KEY_PATH || path.join(__dirname, "..", "app", "grading", "answer-key.json");
@@ -84,8 +105,7 @@ function refreshSessionStats(session) {
 }
 
 function parseQuestionId(value) {
-  const questionId = Number(value);
-  return Number.isInteger(questionId) ? questionId : null;
+  return Number.isInteger(value) ? value : null;
 }
 
 function validateSelectedAnswer(selectedAnswer, question) {
@@ -100,9 +120,10 @@ app.get("/", (req, res) => {
 
 // Start a new exam session
 app.post("/exam/start", (req, res) => {
-  const { userId, name } = req.body;
+  const { userId, name } = req.body || {};
 
-  if (!userId || !name) {
+  if (typeof userId !== "string" || !userId.trim()
+    || typeof name !== "string" || !name.trim()) {
     return res.status(400).json({
       message: "userId and name are required",
     });
@@ -154,9 +175,10 @@ app.get("/exam/mcq", (req, res) => {
 
 // Save or update one answer
 app.post("/exam/answer", (req, res) => {
-  const { sessionId, questionId, selectedAnswer } = req.body;
+  const { sessionId, questionId, selectedAnswer } = req.body || {};
 
-  if (!sessionId || questionId === undefined || selectedAnswer === undefined) {
+  if (typeof sessionId !== "string" || !sessionId
+    || questionId === undefined || selectedAnswer === undefined) {
     return res.status(400).json({
       message: "sessionId, questionId and selectedAnswer are required",
     });
@@ -225,9 +247,9 @@ app.post("/exam/answer", (req, res) => {
 
 // Clear one answer
 app.post("/exam/answer/clear", (req, res) => {
-  const { sessionId, questionId } = req.body;
+  const { sessionId, questionId } = req.body || {};
 
-  if (!sessionId || questionId === undefined) {
+  if (typeof sessionId !== "string" || !sessionId || questionId === undefined) {
     return res.status(400).json({
       message: "sessionId and questionId are required",
     });
@@ -291,9 +313,9 @@ app.get("/exam/session/:sessionId", (req, res) => {
 
 // Submit the whole exam
 app.post("/exam/submit", (req, res) => {
-  const { sessionId } = req.body;
+  const { sessionId } = req.body || {};
 
-  if (!sessionId) {
+  if (typeof sessionId !== "string" || !sessionId) {
     return res.status(400).json({ message: "sessionId is required" });
   }
 

@@ -1,7 +1,7 @@
 // App.jsx
 import { useEffect, useRef, useState } from 'react';
 import Quiz from './components/Quiz/Quiz';
-import { API_BASE_URL, apiUrl } from './api';
+import { API_BASE_URL, apiFetch } from './api';
 import './App.css';
 
 function App() {
@@ -47,7 +47,7 @@ function App() {
   useEffect(() => {
     const storedSessionId = localStorage.getItem('athena_sessionId');
     if (storedSessionId) {
-      fetch(apiUrl(`/exam/session/${storedSessionId}`))
+      apiFetch(`/exam/session/${storedSessionId}`)
         .then(res => {
           if (!res.ok) throw new Error("Session not found");
           return res.json();
@@ -270,7 +270,7 @@ function App() {
       localStorage.setItem('athena_studentName', studentName.trim());
       localStorage.setItem('athena_studentId', studentId.trim());
 
-      const response = await fetch(apiUrl('/exam/start'), {
+      const response = await apiFetch('/exam/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

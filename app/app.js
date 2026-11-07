@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog, desktopCapturer, session, screen, Menu } from "electron";
+import { randomBytes } from "crypto";
 import path from "path";
 import fs from "fs";
 import { fork } from "child_process";
@@ -9,6 +10,9 @@ let cameraShotPath = null;
 let forceQuit = false;
 let timerInterval = null;
 let cameraSnapInterval = null;
+let apiToken = null;
+
+const API_BASE_URL = (process.env.ATHENA_API_BASE_URL || "http://127.0.0.1:3000").replace(/\/$/, "");
 
 function clearExamIntervals() {
     if (timerInterval) {
@@ -120,6 +124,66 @@ function createWindow() {
 
 ipcMain.handle('is-fullscreen', () => {
     return electronWindow ? electronWindow.isFullScreen() : false;
+});
+
+ipcMain.handle('api-request', async (event, request) => {
+    if (!electronWindow || electronWindow.isDestroyed() || event.sender !== electronWindow.webContents) {
+        throw new Error('API request rejected: untrusted renderer');
+    }
+
+    if (!apiToken) {
+        throw new Error('API request rejected: authentication is unavailable');
+    }
+
+    const apiPath = request?.path;
+    const requestedMethod = request?.method || 'GET';
+    const requestBody = request?.body;
+
+    if (typeof requestedMethod !== 'string') {
+        throw new Error('API request rejected: invalid method');
+    }
+
+    const method = requestedMethod.toUpperCase();
+
+    if (typeof apiPath !== 'string' || !/^\/exam(?:\/|$)/.test(apiPath)) {
+        throw new Error('API request rejected: invalid path');
+    }
+
+    if (method !== 'GET' && method !== 'POST') {
+        throw new Error('API request rejected: invalid method');
+    }
+
+    if (requestBody !== undefined && typeof requestBody !== 'string') {
+        throw new Error('API request rejected: invalid body');
+    }
+
+    const headers = {
+        Authorization: `Bearer ${apiToken}`
+    };
+
+    if (requestBody !== undefined) {
+        headers['Content-Type'] = 'application/json';
+    }
+
+    const response = await fetch(`${API_BASE_URL}${apiPath}`, {
+        method,
+        headers,
+        body: method === 'GET' ? undefined : requestBody
+    });
+    const responseText = await response.text();
+    let data;
+
+    try {
+        data = responseText ? JSON.parse(responseText) : null;
+    } catch {
+        data = { message: responseText || `Request failed with status ${response.status}` };
+    }
+
+    return {
+        ok: response.ok,
+        status: response.status,
+        data
+    };
 });
 
 ipcMain.handle('check-multiple-displays', () => {
@@ -247,6 +311,8 @@ ipcMain.handle("exit-exam", (_event, confirm = true) => {
 
 
 app.whenReady().then(() => {
+    apiToken = randomBytes(32).toString('base64url');
+
     const serverPath = app.isPackaged
         ? path.join(process.resourcesPath, 'backend', 'server.js')
         : path.join(import.meta.dirname, '../backend/server.js');
@@ -256,6 +322,7 @@ app.whenReady().then(() => {
     const sessionsPath = path.join(app.getPath('userData'), 'sessions.json');
     const backendEnv = {
         ...process.env,
+        API_TOKEN: apiToken,
         ANSWER_KEY_PATH: answerKeyPath,
         SESSIONS_PATH: sessionsPath
     };

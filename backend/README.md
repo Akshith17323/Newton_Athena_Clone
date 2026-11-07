@@ -24,8 +24,18 @@ app/
 
 ```bash
 npm install
-npm start
+API_TOKEN="replace-with-at-least-32-random-characters" npm start
 ```
+
+The Electron application generates a cryptographically random API token for every launch and supplies it to the backend automatically. When running the backend manually, set `API_TOKEN` yourself.
+
+Every API request requires the token:
+
+```http
+Authorization: Bearer replace-with-at-least-32-random-characters
+```
+
+Requests with a missing or incorrect token return `401 Unauthorized`. The packaged renderer sends requests through a restricted Electron IPC bridge, so the token is not exposed to renderer JavaScript.
 
 Server runs at:
 

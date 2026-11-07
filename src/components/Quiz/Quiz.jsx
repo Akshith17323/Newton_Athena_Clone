@@ -1,6 +1,6 @@
 // Quiz.jsx
 import { useState, useEffect, useRef } from 'react';
-import { apiUrl } from '../../api';
+import { apiFetch } from '../../api';
 import './Quiz.css';
 
 function formatTime(totalSeconds) {
@@ -26,7 +26,7 @@ export default function Quiz({ sessionId, timer, violationCount = 0, restoredAns
 
   // Fetch questions
   useEffect(() => {
-    fetch(apiUrl('/exam/mcq'))
+    apiFetch('/exam/mcq')
       .then(res => {
         if (!res.ok) throw new Error("Failed to fetch");
         return res.json();
@@ -72,7 +72,7 @@ export default function Quiz({ sessionId, timer, violationCount = 0, restoredAns
     setAnswers(prev => ({ ...prev, [questionId]: selectedAnswerIndex }));
 
     try {
-      const res = await fetch(apiUrl('/exam/answer'), {
+      const res = await apiFetch('/exam/answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -106,7 +106,7 @@ export default function Quiz({ sessionId, timer, violationCount = 0, restoredAns
     restoreAnswer(questionId, undefined);
 
     try {
-      const res = await fetch(apiUrl('/exam/answer/clear'), {
+      const res = await apiFetch('/exam/answer/clear', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, questionId })
@@ -143,7 +143,7 @@ export default function Quiz({ sessionId, timer, violationCount = 0, restoredAns
     isSubmittingRef.current = true;
     setIsSubmitting(true);
     try {
-      const res = await fetch(apiUrl('/exam/submit'), {
+      const res = await apiFetch('/exam/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId })
