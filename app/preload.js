@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld("athena", {
+    apiRequest: (request) => {
+        return ipcRenderer.invoke('api-request', request);
+    },
     registerListenerForTimerTickFromMain: (callback) => {
         // callback is setTimer
         const fn = (event, message) => {
