@@ -329,10 +329,13 @@ app.post("/exam/submit", (req, res) => {
     return res.status(404).json({ message: "Session not found" });
   }
 
-  session.status = "submitted";
-  session.submittedAt = new Date().toISOString();
+  // Retries return the saved result without changing the original submission time.
+  if (session.status !== "submitted") {
+    session.status = "submitted";
+    session.submittedAt = new Date().toISOString();
 
-  saveSessions(sessions);
+    saveSessions(sessions);
+  }
 
   res.json({
     message: "Exam submitted successfully",
