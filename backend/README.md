@@ -221,6 +221,10 @@ Example response:
 }
 ```
 
+Submission is idempotent. The first successful request marks the session as submitted and records `submittedAt`. Repeating the request returns `200` with the same saved result without rewriting the session or its original submission time, including after a backend restart.
+
+The original submission time is available through `GET /exam/session/:sessionId`. Submitted sessions no longer accept answer updates or clears.
+
 ## Important Teaching Point
 
 The frontend never receives `correctAnswer` when fetching a question.
