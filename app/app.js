@@ -235,20 +235,34 @@ ipcMain.handle('store-camera-snap-image-on-disk', (_event, data, sessionId) => {
 })
 
 
+async function getPrimaryScreenSource(thumbnailSize) {
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const sources = await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: thumbnailSize ?? {
+            width: Math.floor(primaryDisplay.size.width * primaryDisplay.scaleFactor),
+            height: Math.floor(primaryDisplay.size.height * primaryDisplay.scaleFactor)
+        }
+    });
+    const screenSources = sources.filter(source => source.id.startsWith('screen:'));
+    const primaryScreen = screenSources.find(source => source.display_id === String(primaryDisplay.id));
+
+    if (primaryScreen) return primaryScreen;
+
+    // Some platforms omit display IDs. Only fall back when the screen is unambiguous.
+    if (screenSources.length === 1 && !screenSources[0].display_id && screen.getAllDisplays().length === 1) {
+        return screenSources[0];
+    }
+
+    throw new Error('The primary display is unavailable for screen capture.');
+}
+
 ipcMain.handle('capture-screen', async (_event, sessionId) => {
     try {
-        const primaryDisplay = screen.getPrimaryDisplay();
-        const { width, height } = primaryDisplay.size;
-        const scaleFactor = primaryDisplay.scaleFactor;
-        
-        const sources = await desktopCapturer.getSources({ 
-            types: ['window', 'screen'], 
-            thumbnailSize: { 
-                width: Math.floor(width * scaleFactor), 
-                height: Math.floor(height * scaleFactor) 
-            } 
-        });
-        const primaryScreen = sources[0];
+        const primaryScreen = await getPrimaryScreenSource();
+        if (primaryScreen.thumbnail.isEmpty()) {
+            throw new Error('The primary display returned an empty screenshot.');
+        }
         const pngBuffer = primaryScreen.thumbnail.toPNG();
 
         let baseDir = path.join(import.meta.dirname, "user-screen-snap");
@@ -350,13 +364,18 @@ app.whenReady().then(() => {
     });
 
     session.defaultSession.setDisplayMediaRequestHandler(
-        (request, callback) => {
-            desktopCapturer.getSources({ types: ['window', 'screen'] }).then((sources) => {
-                // Grant access to the first screen found.
-                callback({ video: sources[0], audio: 'loopback' })
-            })
+        async (_request, callback) => {
+            let streams = {};
+            try {
+                const primaryScreen = await getPrimaryScreenSource({ width: 0, height: 0 });
+                streams = { video: primaryScreen };
+            } catch (error) {
+                console.error('Failed to select a screen sharing source:', error);
+            }
+            callback(streams);
         },
-        { useSystemPicker: true }
+        // The native picker bypasses this handler and can select a window or another display.
+        { useSystemPicker: false }
     );
     createWindow();
 });
