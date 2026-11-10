@@ -33,7 +33,7 @@ app.use(authenticateRequest);
 app.use(express.json({ limit: "32kb" }));
 
 const questionsPath = path.join(__dirname, "data", "questions.json");
-const answerKeyPath = process.env.ANSWER_KEY_PATH || path.join(__dirname, "..", "app", "grading", "answer-key.json");
+const answerKeyPath = process.env.ANSWER_KEY_PATH || path.join(__dirname, "grading", "answer-key.json");
 const sessionsPath = process.env.SESSIONS_PATH || path.join(__dirname, "data", "sessions.json");
 
 function readQuestions() {
