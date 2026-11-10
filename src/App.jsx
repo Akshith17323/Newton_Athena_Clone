@@ -1,7 +1,7 @@
 // App.jsx
 import { useEffect, useRef, useState } from 'react';
 import Quiz from './components/Quiz/Quiz';
-import { API_BASE_URL, apiFetch } from './api';
+import { apiFetch } from './api';
 import './App.css';
 
 function App() {
@@ -291,7 +291,7 @@ function App() {
       }
     } catch (error) {
       console.error("Network error:", error);
-      alert(`Network error: ${error.message} (Make sure the backend is running at ${API_BASE_URL}!)`);
+      alert(`Exam service unavailable: ${error.message}. Check your network connection or contact the exam administrator.`);
     }
   }
 

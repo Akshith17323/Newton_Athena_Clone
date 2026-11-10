@@ -10,9 +10,10 @@ let cameraShotPath = null;
 let forceQuit = false;
 let timerInterval = null;
 let cameraSnapInterval = null;
+let apiBaseUrl = null;
 let apiToken = null;
 
-const API_BASE_URL = (process.env.ATHENA_API_BASE_URL || "http://127.0.0.1:3000").replace(/\/$/, "");
+const LOCAL_API_BASE_URL = "http://127.0.0.1:3000";
 
 function clearExamIntervals() {
     if (timerInterval) {
@@ -165,7 +166,7 @@ ipcMain.handle('api-request', async (event, request) => {
         headers['Content-Type'] = 'application/json';
     }
 
-    const response = await fetch(`${API_BASE_URL}${apiPath}`, {
+    const response = await fetch(`${apiBaseUrl}${apiPath}`, {
         method,
         headers,
         body: method === 'GET' ? undefined : requestBody
@@ -323,41 +324,102 @@ ipcMain.handle("exit-exam", (_event, confirm = true) => {
     }
 });
 
+function normalizeApiBaseUrl(value, requireRemoteHttps) {
+    let url;
 
-app.whenReady().then(() => {
-    apiToken = randomBytes(32).toString('base64url');
-
-    const serverPath = app.isPackaged
-        ? path.join(process.resourcesPath, 'backend', 'server.js')
-        : path.join(import.meta.dirname, '../backend/server.js');
-    const answerKeyPath = app.isPackaged
-        ? path.join(app.getAppPath(), 'app', 'grading', 'answer-key.json')
-        : path.join(import.meta.dirname, 'grading', 'answer-key.json');
-    const sessionsPath = path.join(app.getPath('userData'), 'sessions.json');
-    const backendEnv = {
-        ...process.env,
-        API_TOKEN: apiToken,
-        ANSWER_KEY_PATH: answerKeyPath,
-        SESSIONS_PATH: sessionsPath
-    };
-
-    if (app.isPackaged) {
-        backendEnv.NODE_PATH = path.join(app.getAppPath(), 'node_modules');
+    try {
+        url = new URL(value);
+    } catch {
+        throw new Error('ATHENA_API_BASE_URL must be a valid HTTP or HTTPS URL.');
     }
 
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        throw new Error('ATHENA_API_BASE_URL must use HTTP or HTTPS.');
+    }
+
+    if (url.username || url.password || url.search || url.hash) {
+        throw new Error('ATHENA_API_BASE_URL cannot contain credentials, a query, or a fragment.');
+    }
+
+    if (requireRemoteHttps) {
+        const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+        const isLoopback = hostname === 'localhost'
+            || hostname.endsWith('.localhost')
+            || hostname === '::1'
+            || hostname === '0.0.0.0'
+            || /^127(?:\.\d{1,3}){3}$/.test(hostname);
+
+        if (url.protocol !== 'https:') {
+            throw new Error('Packaged builds require an HTTPS ATHENA_API_BASE_URL.');
+        }
+
+        if (isLoopback) {
+            throw new Error('Packaged builds require a separately hosted, non-local exam API.');
+        }
+    }
+
+    return url.toString().replace(/\/$/, '');
+}
+
+function configureExamApi() {
+    const configuredBaseUrl = process.env.ATHENA_API_BASE_URL?.trim();
+
+    if (configuredBaseUrl) {
+        const configuredToken = process.env.ATHENA_API_TOKEN?.trim();
+
+        if (!configuredToken || configuredToken.length < 32) {
+            throw new Error('ATHENA_API_TOKEN must be configured with at least 32 characters.');
+        }
+
+        apiBaseUrl = normalizeApiBaseUrl(configuredBaseUrl, app.isPackaged);
+        apiToken = configuredToken;
+        return null;
+    }
+
+    if (app.isPackaged) {
+        throw new Error(
+            'ATHENA_API_BASE_URL is required. Packaged builds do not contain a local grading service.'
+        );
+    }
+
+    apiBaseUrl = LOCAL_API_BASE_URL;
+    apiToken = randomBytes(32).toString('base64url');
+
+    const serverPath = path.join(import.meta.dirname, '../backend/server.js');
+    const sessionsPath = path.join(app.getPath('userData'), 'sessions.json');
     const backendProcess = fork(serverPath, [], {
-        env: backendEnv
+        env: {
+            ...process.env,
+            API_TOKEN: apiToken,
+            SESSIONS_PATH: sessionsPath
+        }
     });
 
     backendProcess.on('error', (error) => {
-        console.error('Failed to start exam backend:', error);
+        console.error('Failed to start development exam backend:', error);
     });
 
     backendProcess.on('exit', (code, signal) => {
         if (!forceQuit && code !== 0) {
-            console.error(`Exam backend exited unexpectedly (code: ${code}, signal: ${signal})`);
+            console.error(`Development exam backend exited unexpectedly (code: ${code}, signal: ${signal})`);
         }
     });
+
+    return backendProcess;
+}
+
+
+app.whenReady().then(() => {
+    let backendProcess;
+
+    try {
+        backendProcess = configureExamApi();
+    } catch (error) {
+        dialog.showErrorBox('Athena configuration error', error.message);
+        forceQuit = true;
+        app.quit();
+        return;
+    }
 
     app.on('will-quit', () => {
         if (backendProcess) backendProcess.kill();

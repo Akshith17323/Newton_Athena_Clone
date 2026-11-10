@@ -11,13 +11,11 @@ exam-backend/
 ├── data/
 │   ├── questions.json
 │   └── sessions.json
+├── grading/
+│   └── answer-key.json
 ├── package.json
 ├── server.js
 └── README.md
-
-app/
-└── grading/
-    └── answer-key.json
 ```
 
 ## Setup
@@ -27,7 +25,9 @@ npm install
 API_TOKEN="replace-with-at-least-32-random-characters" npm start
 ```
 
-The Electron application generates a cryptographically random API token for every launch and supplies it to the backend automatically. When running the backend manually, set `API_TOKEN` yourself.
+In local development, the Electron application generates a cryptographically random API token for every launch and supplies it to the backend automatically. A remotely deployed backend and its desktop clients must be provisioned with matching `API_TOKEN` and `ATHENA_API_TOKEN` values.
+
+`ANSWER_KEY_PATH` can point to a grading key stored outside the checkout, such as a mounted production secret. If it is omitted, the development key at `grading/answer-key.json` is used.
 
 Every API request requires the token:
 
@@ -231,7 +231,7 @@ The frontend never receives `correctAnswer` when fetching a question.
 
 The public `questions.json` file contains no correct answers. The backend loads the separate grading key through `ANSWER_KEY_PATH` and checks submitted answers itself.
 
-In packaged local builds, the grading key is stored inside `app.asar` instead of the externally visible `Resources/backend` directory. This is local hardening, not a complete security boundary; production exams should use a separately controlled remote grading service.
+Packaged desktop builds contain neither this backend nor its grading key. Production grading must run on a separately controlled remote host; encryption or obfuscation inside `app.asar` would not provide a security boundary.
 
 That gives students the basic client/server idea:
 
@@ -256,9 +256,9 @@ Frontend             Backend
 The JSON files are acting as our database.
 
 ```text
-questions.json          = public question database
-app/grading/answer-key  = local grading data
-sessions.json           = exam session database
+questions.json            = public question database
+grading/answer-key.json   = server-side development grading data
+sessions.json             = exam session database
 ```
 
 Later these can be replaced with a real database without changing the basic API idea.

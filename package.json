@@ -17,20 +17,10 @@
     "appId": "app.athena",
     "productName": "Athena",
     "files": [
-      "app/**/*",
+      "app/app.js",
+      "app/preload.js",
       "dist/**/*",
       "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "backend",
-        "to": "backend",
-        "filter": [
-          "**/*",
-          "!data/sessions.json",
-          "!node_modules/**"
-        ]
-      }
     ],
     "win": {
       "target": "nsis",

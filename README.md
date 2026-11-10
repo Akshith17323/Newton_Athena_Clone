@@ -1,16 +1,51 @@
-# React + Vite
+# Athena Desktop Exam Client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Athena is an Electron and React exam client. Grading is performed by the API in
+`backend/`; production desktop packages never contain that service or its answer
+key.
 
-Currently, two official plugins are available:
+## Local development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Install dependencies, start Vite, and then start Electron in another terminal:
 
-## React Compiler
+```bash
+npm install
+npm run dev
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm start
+```
 
-## Expanding the ESLint configuration
+When Electron is not packaged and no remote API is configured, it starts the
+development backend on `127.0.0.1:3000` with a random per-launch API token.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Production deployment
+
+Deploy `backend/` on infrastructure controlled by the exam administrator. Keep
+the production answer key on that server and point `ANSWER_KEY_PATH` at it. Put
+the service behind HTTPS and configure a token of at least 32 characters:
+
+```bash
+API_TOKEN="replace-with-a-long-random-token" \
+ANSWER_KEY_PATH="/run/secrets/athena-answer-key.json" \
+npm --prefix backend start
+```
+
+Build the desktop application with `npm run build`. At launch, provision the
+remote endpoint and matching API credential in the application environment:
+
+```bash
+ATHENA_API_BASE_URL="https://exam-api.example.edu" \
+ATHENA_API_TOKEN="replace-with-a-long-random-token" \
+./Athena
+```
+
+Packaged builds intentionally fail closed when these settings are absent, when
+the endpoint is local, or when it does not use HTTPS. The credential controls
+API access; it is not a substitute for candidate authentication and should be
+provisioned by the administrator rather than committed to the desktop source.
+
+The Electron Builder file list is an allowlist containing only `app/app.js`,
+`app/preload.js`, the compiled UI, and package metadata. `backend/`, grading
+files, and session records are not copied into desktop artifacts.
