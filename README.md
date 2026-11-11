@@ -6,12 +6,24 @@ key.
 
 ## Local development
 
-Install dependencies, start Vite, and then start Electron in another terminal:
+To launch from a clean checkout:
 
 ```bash
 npm install
+npm start
+```
+
+`npm start` builds the UI before launching Electron. If the Vite dev server is
+unavailable, Electron loads the complete build from `dist/`. A failed build stops
+startup.
+
+For live UI updates, start Vite first:
+
+```bash
 npm run dev
 ```
+
+Then launch Electron in another terminal:
 
 ```bash
 npm start
