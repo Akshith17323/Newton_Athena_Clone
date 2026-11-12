@@ -1,5 +1,43 @@
 /* Quiz.css */
 
+.quiz-load-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  width: 100%;
+  padding: 24px;
+  background-color: #ffffff;
+  text-align: center;
+}
+
+.quiz-load-card {
+  max-width: 440px;
+}
+
+.quiz-load-title {
+  margin-bottom: 12px;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.quiz-load-message {
+  color: #64748b;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.quiz-retry-btn {
+  margin-top: 20px;
+}
+
+.quiz-retry-btn:focus-visible {
+  outline: 2px solid #338656;
+  outline-offset: 3px;
+}
+
 .quiz-page {
   display: flex;
   flex-direction: column;

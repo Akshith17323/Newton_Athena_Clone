@@ -14,6 +14,8 @@ function formatTime(totalSeconds) {
 
 export default function Quiz({ sessionId, timer, violationCount = 0, restoredAnswers, onFinish }) {
   const [questions, setQuestions] = useState([]);
+  const [questionLoadState, setQuestionLoadState] = useState({ status: 'loading', message: '' });
+  const [questionLoadAttempt, setQuestionLoadAttempt] = useState(0);
   const [answers, setAnswers] = useState(restoredAnswers || {});
   const [reviewed, setReviewed] = useState({});
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -26,14 +28,54 @@ export default function Quiz({ sessionId, timer, violationCount = 0, restoredAns
 
   // Fetch questions
   useEffect(() => {
-    apiFetch('/exam/mcq')
-      .then(res => {
-        if (!res.ok) throw new Error("Failed to fetch");
-        return res.json();
-      })
-      .then(data => setQuestions(data))
-      .catch(err => console.error("Failed to fetch questions:", err));
-  }, []);
+    let cancelled = false;
+
+    async function loadQuestions() {
+      try {
+        const res = await apiFetch('/exam/mcq');
+        if (!res.ok) throw new Error(`Question request failed with status ${res.status}`);
+
+        const data = await res.json();
+        if (!Array.isArray(data) || data.some(question => (
+          !question
+          || !Number.isInteger(question.id)
+          || typeof question.question !== 'string'
+          || !Array.isArray(question.options)
+          || question.options.length === 0
+          || question.options.some(option => typeof option !== 'string')
+        ))) {
+          throw new Error('Invalid question response');
+        }
+
+        if (cancelled) return;
+        if (data.length === 0) {
+          setQuestionLoadState({
+            status: 'error',
+            message: 'No questions are available for this quiz. Please try again or contact your proctor.'
+          });
+          return;
+        }
+
+        setQuestions(data);
+        setQuestionLoadState({ status: 'ready', message: '' });
+      } catch (err) {
+        if (cancelled) return;
+        console.error("Failed to fetch questions:", err);
+        setQuestionLoadState({
+          status: 'error',
+          message: 'Please check your connection and try again. If the problem continues, contact your proctor.'
+        });
+      }
+    }
+
+    loadQuestions();
+    return () => { cancelled = true; };
+  }, [questionLoadAttempt]);
+
+  function retryQuestions() {
+    setQuestionLoadState({ status: 'loading', message: '' });
+    setQuestionLoadAttempt(attempt => attempt + 1);
+  }
 
   function markQuestionPending(questionId, isPending) {
     if (isPending) {
@@ -164,11 +206,27 @@ export default function Quiz({ sessionId, timer, violationCount = 0, restoredAns
     }
   }
 
-  if (questions.length === 0) {
+  if (questionLoadState.status !== 'ready') {
+    const isLoading = questionLoadState.status === 'loading';
+
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: '#ffffff' }}>
-        <p style={{ color: '#64748b', fontSize: '15px', fontWeight: '500' }}>Loading quiz questions...</p>
-      </div>
+      <main className="quiz-load-state" aria-busy={isLoading}>
+        <div className="quiz-load-card">
+          {isLoading ? (
+            <p className="quiz-load-message" role="status">Loading quiz questions...</p>
+          ) : (
+            <>
+              <div role="alert">
+                <h2 className="quiz-load-title">Unable to load questions</h2>
+                <p className="quiz-load-message">{questionLoadState.message}</p>
+              </div>
+              <button type="button" className="submit-quiz-btn quiz-retry-btn" onClick={retryQuestions}>
+                Retry
+              </button>
+            </>
+          )}
+        </div>
+      </main>
     );
   }
 
