@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../api';
 import './Quiz.css';
 
+const QUESTION_LOAD_TIMEOUT_MS = 15000;
+
 function formatTime(totalSeconds) {
   if (totalSeconds === null || totalSeconds === undefined || totalSeconds === '') return '00:00';
   const sec = typeof totalSeconds === 'number' ? totalSeconds : parseInt(totalSeconds, 10);
@@ -29,6 +31,13 @@ export default function Quiz({ sessionId, timer, violationCount = 0, restoredAns
   // Fetch questions
   useEffect(() => {
     let cancelled = false;
+    const timeoutId = setTimeout(() => {
+      cancelled = true;
+      setQuestionLoadState({
+        status: 'error',
+        message: 'Loading questions timed out. Please check your connection and try again, or contact your proctor.'
+      });
+    }, QUESTION_LOAD_TIMEOUT_MS);
 
     async function loadQuestions() {
       try {
@@ -65,11 +74,16 @@ export default function Quiz({ sessionId, timer, violationCount = 0, restoredAns
           status: 'error',
           message: 'Please check your connection and try again. If the problem continues, contact your proctor.'
         });
+      } finally {
+        clearTimeout(timeoutId);
       }
     }
 
     loadQuestions();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
   }, [questionLoadAttempt]);
 
   function retryQuestions() {
