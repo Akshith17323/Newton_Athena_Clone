@@ -145,21 +145,38 @@ function App() {
   }, [quizStarted]);
 
   async function saveVideoScreenShots() {
-    if (!sessionIdRef.current) return;
-    if (!videoRef.current || !videoRef.current.srcObject) return;
+    const activeSessionId = sessionIdRef.current;
+    if (!activeSessionId) return;
 
-    try {
-      const track = videoRef.current.srcObject.getVideoTracks()[0];
+    // Start both captures independently so a missing or failed webcam never
+    // prevents the desktop snapshot (and vice versa).
+    const screenCapture = Promise.resolve().then(() => (
+      window.athena?.captureScreen?.(activeSessionId)
+    ));
+    const cameraCapture = Promise.resolve().then(async () => {
+      const video = videoRef.current;
+      if (!video?.srcObject) return;
+
+      const track = video.srcObject.getVideoTracks()[0];
       if (!track) return;
 
       const imageCapture = new ImageCapture(track);
       const blob = await imageCapture.takePhoto();
       const arrayBuffer = await blob.arrayBuffer();
 
-      window.athena?.storeCameraSnapImageOnDisk?.(arrayBuffer, sessionIdRef.current);
-      window.athena?.captureScreen?.(sessionIdRef.current);
-    } catch (error) {
-      console.error("Failed to capture image via ImageCapture:", error);
+      await window.athena?.storeCameraSnapImageOnDisk?.(arrayBuffer, activeSessionId);
+    });
+
+    const [screenResult, cameraResult] = await Promise.allSettled([
+      screenCapture,
+      cameraCapture,
+    ]);
+
+    if (screenResult.status === 'rejected') {
+      console.error("Failed to capture desktop image:", screenResult.reason);
+    }
+    if (cameraResult.status === 'rejected') {
+      console.error("Failed to capture webcam image:", cameraResult.reason);
     }
   }
 

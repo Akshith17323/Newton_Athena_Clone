@@ -53,7 +53,7 @@ contextBridge.exposeInMainWorld("athena", {
         }
     },
 
-    // Functions related to capturing camera snaps of user
+    // Functions related to periodic proctoring snapshots
     registerListenerForCameraSnapFromMain: (callback) => {
         ipcRenderer.on('camera-shot', callback);
 
@@ -63,10 +63,10 @@ contextBridge.exposeInMainWorld("athena", {
     },
 
     storeCameraSnapImageOnDisk: (data, sessionId) => {
-        ipcRenderer.invoke('store-camera-snap-image-on-disk', data, sessionId);
+        return ipcRenderer.invoke('store-camera-snap-image-on-disk', data, sessionId);
     },
     captureScreen: (sessionId) => {
-        ipcRenderer.invoke('capture-screen', sessionId);
+        return ipcRenderer.invoke('capture-screen', sessionId);
     },
 
     // Functions related to showing Contest Rules in a new Dialog

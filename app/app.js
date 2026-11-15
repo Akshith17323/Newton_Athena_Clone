@@ -203,7 +203,7 @@ ipcMain.handle('start-timer', () => {
         }
     }, 1000);
 
-    // Capture user's camera snap every 5s
+    // Request independent camera and desktop snapshots every 5s
     cameraSnapInterval = setInterval(() => {
         if (electronWindow && !electronWindow.isDestroyed()) {
             electronWindow.webContents.send('camera-shot');
@@ -282,6 +282,7 @@ ipcMain.handle('capture-screen', async (_event, sessionId) => {
         return filePath;
     } catch (error) {
         console.error("Failed to capture screen:", error);
+        throw error;
     }
 })
 
