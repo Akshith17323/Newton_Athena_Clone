@@ -5,6 +5,7 @@
   "type": "module",
   "main": "app/app.js",
   "scripts": {
+    "test": "node --test tests/*.test.js",
     "dev": "vite",
     "start": "npm run vite:build && electron .",
     "vite:build": "vite build",
@@ -19,6 +20,8 @@
     "files": [
       "app/app.js",
       "app/preload.js",
+      "app/snapshot-policy.js",
+      "app/snapshot-store.js",
       "dist/**/*",
       "package.json"
     ],

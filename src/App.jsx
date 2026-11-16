@@ -1,7 +1,8 @@
 // App.jsx
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Quiz from './components/Quiz/Quiz';
 import { apiFetch } from './api';
+import { captureCameraFrame, createSnapshotCaptureRunner } from './snapshots';
 import './App.css';
 
 function App() {
@@ -19,6 +20,9 @@ function App() {
   const [timer, setTimer] = useState('');
   const [sessionId, setSessionId] = useState(null);
   const sessionIdRef = useRef(null);
+  const quizStartedRef = useRef(false);
+  const [runSnapshotCapture] = useState(() => createSnapshotCaptureRunner());
+  const [snapshotErrors, setSnapshotErrors] = useState({});
 
   const [quizStarted, setQuizStarted] = useState(false);
   const [restoredAnswers, setRestoredAnswers] = useState({});
@@ -34,7 +38,8 @@ function App() {
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
-  }, [sessionId]);
+    quizStartedRef.current = quizStarted;
+  }, [sessionId, quizStarted]);
 
   // Keep video stream alive across re-renders
   useEffect(() => {
@@ -144,41 +149,47 @@ function App() {
     };
   }, [quizStarted]);
 
-  async function saveVideoScreenShots() {
+  const saveVideoScreenShots = useCallback(async () => {
     const activeSessionId = sessionIdRef.current;
-    if (!activeSessionId) return;
+    const isActive = () => quizStartedRef.current && sessionIdRef.current === activeSessionId;
+    if (!activeSessionId || !isActive()) return;
+
+    const onSlowCapture = (kind) => () => {
+      if (isActive()) {
+        setSnapshotErrors(previous => ({ ...previous, [kind]: 'Capture is delayed. Check the capture folder or contact your proctor.' }));
+      }
+    };
 
     // Start both captures independently so a missing or failed webcam never
     // prevents the desktop snapshot (and vice versa).
-    const screenCapture = Promise.resolve().then(() => (
+    const screenCapture = runSnapshotCapture('screen', () => (
       window.athena?.captureScreen?.(activeSessionId)
-    ));
-    const cameraCapture = Promise.resolve().then(async () => {
-      const video = videoRef.current;
-      if (!video?.srcObject) return;
-
-      const track = video.srcObject.getVideoTracks()[0];
-      if (!track) return;
-
-      const imageCapture = new ImageCapture(track);
-      const blob = await imageCapture.takePhoto();
-      const arrayBuffer = await blob.arrayBuffer();
-
-      await window.athena?.storeCameraSnapImageOnDisk?.(arrayBuffer, activeSessionId);
-    });
+    ), onSlowCapture('screen'));
+    const cameraCapture = runSnapshotCapture('camera', async () => {
+      const arrayBuffer = await captureCameraFrame(videoRef.current);
+      if (!arrayBuffer || !isActive()) return null;
+      return await window.athena?.storeCameraSnapImageOnDisk?.(arrayBuffer, activeSessionId);
+    }, onSlowCapture('camera'));
 
     const [screenResult, cameraResult] = await Promise.allSettled([
       screenCapture,
       cameraCapture,
     ]);
 
-    if (screenResult.status === 'rejected') {
-      console.error("Failed to capture desktop image:", screenResult.reason);
+    if (!isActive()) return;
+    for (const [kind, result] of [['screen', screenResult], ['camera', cameraResult]]) {
+      if (result.status === 'rejected') {
+        console.error(`Failed to capture ${kind} image:`, result.reason);
+        setSnapshotErrors(previous => ({ ...previous, [kind]: result.reason?.message || 'Capture failed. Contact your proctor.' }));
+      } else if (result.value) {
+        setSnapshotErrors(previous => {
+          const next = { ...previous };
+          delete next[kind];
+          return next;
+        });
+      }
     }
-    if (cameraResult.status === 'rejected') {
-      console.error("Failed to capture webcam image:", cameraResult.reason);
-    }
-  }
+  }, [runSnapshotCapture]);
 
   // Main IPC listeners
   useEffect(() => {
@@ -204,7 +215,7 @@ function App() {
       removeKeyboardListener();
       removeWindowBlurListener();
     };
-  }, [quizStarted]);
+  }, [quizStarted, saveVideoScreenShots]);
 
   async function getCameraAccess() {
     try {
@@ -299,6 +310,7 @@ function App() {
       if (response.ok) {
         console.log("Exam started with Session ID:", data.sessionId);
         setSessionId(data.sessionId);
+        setSnapshotErrors({});
         setQuizStarted(true);
         setShowPermissionsModal(false);
         localStorage.setItem('athena_sessionId', data.sessionId);
@@ -322,6 +334,7 @@ function App() {
 
     if (!await hasValidDisplaySetup()) return;
 
+    setSnapshotErrors({});
     setQuizStarted(true);
     setShowPermissionsModal(false);
     await window.athena?.startTimerOnMain?.();
@@ -439,6 +452,14 @@ function App() {
   if (quizStarted) {
     return (
       <div style={{ position: 'relative', width: '100%', minHeight: '100vh', backgroundColor: '#ffffff' }}>
+        {Object.keys(snapshotErrors).length > 0 && (
+          <div className="snapshot-warning" role="status">
+            <strong>Proctoring snapshots need attention</strong>
+            {Object.entries(snapshotErrors).map(([kind, message]) => (
+              <div key={kind}>{kind === 'screen' ? 'Desktop' : 'Webcam'}: {message}</div>
+            ))}
+          </div>
+        )}
         <video
           ref={videoRef}
           autoPlay
@@ -466,6 +487,7 @@ function App() {
           violationCount={violationCount}
           restoredAnswers={restoredAnswers}
           onFinish={(results) => {
+            quizStartedRef.current = false;
             window.athena?.stopTimerOnMain?.();
             setExamResults(results);
             setQuizStarted(false);
