@@ -3,10 +3,14 @@ import { randomBytes } from "crypto";
 import path from "path";
 import fs from "fs";
 import { fork } from "child_process";
+import { SnapshotStore } from './snapshot-store.js';
+import { getSnapshotDimensions, SNAPSHOT_POLICY } from './snapshot-policy.js';
 
 let electronWindow = null;
 let startTimestamp = null;
-let cameraShotPath = null;
+let snapshotStore = null;
+let captureGeneration = 0;
+let selectingFolder = false;
 let forceQuit = false;
 let timerInterval = null;
 let cameraSnapInterval = null;
@@ -16,6 +20,7 @@ let apiToken = null;
 const LOCAL_API_BASE_URL = "http://127.0.0.1:3000";
 
 function clearExamIntervals() {
+    captureGeneration += 1;
     if (timerInterval) {
         clearInterval(timerInterval);
         timerInterval = null;
@@ -24,6 +29,29 @@ function clearExamIntervals() {
         clearInterval(cameraSnapInterval);
         cameraSnapInterval = null;
     }
+}
+
+function requireSnapshotRenderer(event) {
+    if (!electronWindow || electronWindow.isDestroyed() || event.sender !== electronWindow.webContents
+        || event.senderFrame !== electronWindow.webContents.mainFrame) {
+        throw new Error('Snapshot request rejected: untrusted renderer');
+    }
+}
+
+function getSnapshotStore() {
+    snapshotStore ??= new SnapshotStore({
+        directory: path.join(app.getPath('userData'), 'athena-snapshots')
+    });
+    return snapshotStore;
+}
+
+function captureSnapshot(event, kind, sessionId, createImage) {
+    requireSnapshotRenderer(event);
+    if (!timerInterval) return null;
+    const generation = captureGeneration;
+    return getSnapshotStore().capture(kind, sessionId, createImage, () => (
+        timerInterval !== null && generation === captureGeneration
+    ));
 }
 
 function attemptQuit() {
@@ -191,7 +219,8 @@ ipcMain.handle('check-multiple-displays', () => {
     return screen.getAllDisplays().length > 1;
 });
 
-ipcMain.handle('start-timer', () => {
+ipcMain.handle('start-timer', (event) => {
+    requireSnapshotRenderer(event);
     clearExamIntervals();
     startTimestamp = Date.now();
 
@@ -208,32 +237,18 @@ ipcMain.handle('start-timer', () => {
         if (electronWindow && !electronWindow.isDestroyed()) {
             electronWindow.webContents.send('camera-shot');
         }
-    }, 5000);
+    }, SNAPSHOT_POLICY.intervalMs);
 });
 
-ipcMain.handle('stop-timer', () => {
+ipcMain.handle('stop-timer', (event) => {
+    requireSnapshotRenderer(event);
     clearExamIntervals();
 });
 
 
-ipcMain.handle('store-camera-snap-image-on-disk', (_event, data, sessionId) => {
-    let baseDir = path.join(import.meta.dirname, "user-camera-snap");
-
-    if (cameraShotPath) {
-        baseDir = cameraShotPath;
-    }
-
-    const sessionDir = sessionId ? path.join(baseDir, sessionId) : path.join(baseDir, "pre-exam-snaps");
-
-    // Ensure the directory exists
-    if (!fs.existsSync(sessionDir)) {
-        fs.mkdirSync(sessionDir, { recursive: true });
-    }
-
-    const filePath = path.join(sessionDir, `${Date.now()}.jpg`);
-
-    fs.writeFileSync(filePath, Buffer.from(data));
-})
+ipcMain.handle('store-camera-snap-image-on-disk', (event, data, sessionId) => (
+    captureSnapshot(event, 'camera', sessionId, () => data)
+));
 
 
 async function getPrimaryScreenSource(thumbnailSize) {
@@ -241,8 +256,8 @@ async function getPrimaryScreenSource(thumbnailSize) {
     const sources = await desktopCapturer.getSources({
         types: ['screen'],
         thumbnailSize: thumbnailSize ?? {
-            width: Math.floor(primaryDisplay.size.width * primaryDisplay.scaleFactor),
-            height: Math.floor(primaryDisplay.size.height * primaryDisplay.scaleFactor)
+            width: SNAPSHOT_POLICY.maxWidth,
+            height: SNAPSHOT_POLICY.maxHeight
         }
     });
     const screenSources = sources.filter(source => source.id.startsWith('screen:'));
@@ -258,33 +273,20 @@ async function getPrimaryScreenSource(thumbnailSize) {
     throw new Error('The primary display is unavailable for screen capture.');
 }
 
-ipcMain.handle('capture-screen', async (_event, sessionId) => {
-    try {
+ipcMain.handle('capture-screen', (event, sessionId) => (
+    captureSnapshot(event, 'screen', sessionId, async () => {
         const primaryScreen = await getPrimaryScreenSource();
         if (primaryScreen.thumbnail.isEmpty()) {
             throw new Error('The primary display returned an empty screenshot.');
         }
-        const pngBuffer = primaryScreen.thumbnail.toPNG();
-
-        let baseDir = path.join(import.meta.dirname, "user-screen-snap");
-        if (cameraShotPath) {
-            baseDir = cameraShotPath;
+        let thumbnail = primaryScreen.thumbnail;
+        const { width, height } = thumbnail.getSize();
+        if (width > SNAPSHOT_POLICY.maxWidth || height > SNAPSHOT_POLICY.maxHeight) {
+            thumbnail = thumbnail.resize(getSnapshotDimensions(width, height));
         }
-
-        const sessionDir = sessionId ? path.join(baseDir, sessionId + "-screen") : path.join(baseDir, "pre-exam-screen-snaps");
-
-        if (!fs.existsSync(sessionDir)) {
-            fs.mkdirSync(sessionDir, { recursive: true });
-        }
-
-        const filePath = path.join(sessionDir, `${Date.now()}_screen.png`);
-        fs.writeFileSync(filePath, pngBuffer);
-        return filePath;
-    } catch (error) {
-        console.error("Failed to capture screen:", error);
-        throw error;
-    }
-})
+        return thumbnail.toJPEG(SNAPSHOT_POLICY.jpegQuality);
+    })
+));
 
 async function showRulesDialog() {
     const response = await dialog.showMessageBox(electronWindow, {
@@ -422,6 +424,7 @@ app.whenReady().then(() => {
         return;
     }
 
+    app.on('before-quit', clearExamIntervals);
     app.on('will-quit', () => {
         if (backendProcess) backendProcess.kill();
     });
@@ -445,21 +448,34 @@ app.whenReady().then(() => {
 
 
 async function selectFolder() {
-    const response = await dialog.showOpenDialog({
-        title: 'Select the folder',
-        buttonLabel: 'OK',
-        properties: ['openDirectory'],
-        defaultPath: '/'
-    });
-
-    if (!response.canceled && response.filePaths.length > 0) {
-        cameraShotPath = response.filePaths[0];
-        return response.filePaths[0];
+    if (selectingFolder || timerInterval || snapshotStore?.isBusy) {
+        throw new Error('Wait for snapshot capture to stop before changing its folder.');
     }
-    console.log(response);
-    return null;
+    selectingFolder = true;
+    try {
+        const response = await dialog.showOpenDialog({
+            title: 'Select the folder',
+            buttonLabel: 'OK',
+            properties: ['openDirectory'],
+            defaultPath: '/'
+        });
+
+        if (!response.canceled && response.filePaths.length > 0) {
+            if (timerInterval || snapshotStore?.isBusy) {
+                throw new Error('Wait for snapshot capture to stop before changing its folder.');
+            }
+            snapshotStore = new SnapshotStore({
+                directory: path.join(response.filePaths[0], 'athena-snapshots')
+            });
+            return response.filePaths[0];
+        }
+        return null;
+    } finally {
+        selectingFolder = false;
+    }
 }
 
-ipcMain.handle("selectFolder", async () => {
+ipcMain.handle("selectFolder", async (event) => {
+    requireSnapshotRenderer(event);
     return await selectFolder();
 });

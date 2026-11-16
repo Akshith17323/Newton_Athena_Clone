@@ -58,6 +58,30 @@ the endpoint is local, or when it does not use HTTPS. The credential controls
 API access; it is not a substitute for candidate authentication and should be
 provisioned by the administrator rather than committed to the desktop source.
 
-The Electron Builder file list is an allowlist containing only `app/app.js`,
-`app/preload.js`, the compiled UI, and package metadata. `backend/`, grading
-files, and session records are not copied into desktop artifacts.
+The Electron Builder file list is an allowlist containing only the Electron
+entry point, preload and snapshot modules, the compiled UI, and package metadata.
+`backend/`, grading files, and session records are not copied into desktop artifacts.
+
+## Proctoring snapshot storage
+
+Snapshots are bounded JPEGs (at most 1280 × 720, 75% quality and 2 MiB per image).
+Each active exam requests camera and desktop captures every five seconds; each
+source has its own in-flight guard, and slow operations are skipped rather than
+queued without limit. Filesystem work is asynchronous. A stalled operation keeps
+its slot occupied even after a 15-second timeout so retries cannot accumulate.
+Capture failures and delays appear as a non-blocking warning during the exam.
+
+The selected folder contains an app-owned `athena-snapshots/` directory with
+`<sessionId>/camera/` and `<sessionId>/screen/` subdirectories. The fallback is
+`athena-snapshots/` in Electron's user-data directory, not the application install.
+The rolling retention policy keeps at most 512 MiB and 5,000 images across all
+sessions in that store, deleting the oldest images first; images older than seven
+days and abandoned partial writes are also removed on capture. Writes stop if
+they would leave less than 256 MiB of free space. These limits are defined in
+`app/snapshot-policy.js`.
+
+Cleanup requires an Athena ownership marker and only removes Athena-named image
+files and empty session directories. Unrelated files, symbolic links, and legacy
+`user-camera-snap` / `user-screen-snap` folders are not automatically deleted.
+Archive required evidence outside the managed store before its rolling limits
+are reached. Run snapshot regression tests with `npm test`.
