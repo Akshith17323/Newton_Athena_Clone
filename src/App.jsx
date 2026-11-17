@@ -19,7 +19,9 @@ function App() {
 
   const [timer, setTimer] = useState('');
   const [sessionId, setSessionId] = useState(null);
+  const [isStartingExam, setIsStartingExam] = useState(false);
   const sessionIdRef = useRef(null);
+  const isStartingExamRef = useRef(false);
   const quizStartedRef = useRef(false);
   const [runSnapshotCapture] = useState(() => createSnapshotCaptureRunner());
   const [snapshotErrors, setSnapshotErrors] = useState({});
@@ -292,9 +294,13 @@ function App() {
       return;
     }
 
-    if (!await hasValidDisplaySetup()) return;
+    if (isStartingExamRef.current) return;
+    isStartingExamRef.current = true;
+    setIsStartingExam(true);
 
     try {
+      if (!await hasValidDisplaySetup()) return;
+
       localStorage.setItem('athena_studentName', studentName.trim());
       localStorage.setItem('athena_studentId', studentId.trim());
 
@@ -321,6 +327,9 @@ function App() {
     } catch (error) {
       console.error("Network error:", error);
       alert(`Exam service unavailable: ${error.message}. Check your network connection or contact the exam administrator.`);
+    } finally {
+      isStartingExamRef.current = false;
+      setIsStartingExam(false);
     }
   }
 
@@ -727,8 +736,8 @@ function App() {
             </div>
 
             {/* Start Test CTA */}
-            <button className="start-test-btn" onClick={handleStartTestClick}>
-              {sessionId ? "Resume Test" : "Start Test"}
+            <button className="start-test-btn" disabled={isStartingExam} onClick={handleStartTestClick}>
+              {isStartingExam ? "Starting..." : sessionId ? "Resume Test" : "Start Test"}
             </button>
           </div>
         </div>
@@ -845,10 +854,10 @@ function App() {
               </button>
               <button
                 className="btn btn-primary btn-sm"
-                disabled={!isPermissionsReady}
+                disabled={!isPermissionsReady || isStartingExam}
                 onClick={sessionId ? resumeExamSession : startExamOnBackend}
               >
-                {sessionId ? 'Resume Test' : 'Launch Test'}
+                {isStartingExam ? 'Launching...' : sessionId ? 'Resume Test' : 'Launch Test'}
               </button>
             </div>
           </div>
