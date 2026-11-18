@@ -20,6 +20,7 @@ function App() {
   const [timer, setTimer] = useState('');
   const [sessionId, setSessionId] = useState(null);
   const [isStartingExam, setIsStartingExam] = useState(false);
+  const candidateGenerationRef = useRef(0);
   const sessionIdRef = useRef(null);
   const isStartingExamRef = useRef(false);
   const quizStartedRef = useRef(false);
@@ -52,6 +53,7 @@ function App() {
 
   // Restore session on load
   useEffect(() => {
+    const candidateGeneration = candidateGenerationRef.current;
     const storedSessionId = localStorage.getItem('athena_sessionId');
     if (storedSessionId) {
       apiFetch(`/exam/session/${storedSessionId}`)
@@ -60,6 +62,8 @@ function App() {
           return res.json();
         })
         .then(data => {
+          if (candidateGenerationRef.current !== candidateGeneration) return;
+
           if (data.name && data.userId) {
             setStudentName(data.name);
             setStudentId(data.userId);
@@ -84,6 +88,7 @@ function App() {
           }
         })
         .catch(err => {
+          if (candidateGenerationRef.current !== candidateGeneration) return;
           console.error("Failed to restore session:", err);
           localStorage.removeItem('athena_sessionId');
         });
@@ -195,7 +200,9 @@ function App() {
 
   // Main IPC listeners
   useEffect(() => {
-    const removeTimerTickListener = window.athena?.registerListenerForTimerTickFromMain?.(setTimer) || (() => {});
+    const removeTimerTickListener = window.athena?.registerListenerForTimerTickFromMain?.((value) => {
+      if (quizStartedRef.current) setTimer(value);
+    }) || (() => {});
     const removeCameraSnapListener = window.athena?.registerListenerForCameraSnapFromMain?.(saveVideoScreenShots) || (() => {});
     const removeKeyboardListener = window.athena?.registerListenerForKeyboardInputFromMain?.((input) => {
       console.log("Keyboard input intercepted from main:", input);
@@ -295,11 +302,12 @@ function App() {
     }
 
     if (isStartingExamRef.current) return;
+    const candidateGeneration = candidateGenerationRef.current;
     isStartingExamRef.current = true;
     setIsStartingExam(true);
 
     try {
-      if (!await hasValidDisplaySetup()) return;
+      if (!await hasValidDisplaySetup() || candidateGenerationRef.current !== candidateGeneration) return;
 
       localStorage.setItem('athena_studentName', studentName.trim());
       localStorage.setItem('athena_studentId', studentId.trim());
@@ -313,6 +321,8 @@ function App() {
         })
       });
       const data = await response.json();
+      if (candidateGenerationRef.current !== candidateGeneration) return;
+
       if (response.ok) {
         console.log("Exam started with Session ID:", data.sessionId);
         setSessionId(data.sessionId);
@@ -325,11 +335,14 @@ function App() {
         alert("Failed to start exam: " + data.message);
       }
     } catch (error) {
+      if (candidateGenerationRef.current !== candidateGeneration) return;
       console.error("Network error:", error);
       alert(`Exam service unavailable: ${error.message}. Check your network connection or contact the exam administrator.`);
     } finally {
-      isStartingExamRef.current = false;
-      setIsStartingExam(false);
+      if (candidateGenerationRef.current === candidateGeneration) {
+        isStartingExamRef.current = false;
+        setIsStartingExam(false);
+      }
     }
   }
 
@@ -341,7 +354,8 @@ function App() {
       return;
     }
 
-    if (!await hasValidDisplaySetup()) return;
+    const candidateGeneration = candidateGenerationRef.current;
+    if (!await hasValidDisplaySetup() || candidateGenerationRef.current !== candidateGeneration) return;
 
     setSnapshotErrors({});
     setQuizStarted(true);
@@ -361,6 +375,36 @@ function App() {
     }
 
     startExamOnBackend();
+  }
+
+  async function handleSwitchUser(event) {
+    event.stopPropagation();
+    candidateGenerationRef.current += 1;
+    sessionIdRef.current = null;
+    quizStartedRef.current = false;
+    isStartingExamRef.current = false;
+    localStorage.removeItem('athena_studentName');
+    localStorage.removeItem('athena_studentId');
+    localStorage.removeItem('athena_sessionId');
+    setStudentName('');
+    setStudentId('');
+    setIsLoggedIn(false);
+    setSessionId(null);
+    setRestoredAnswers({});
+    setExamResults(null);
+    setQuizStarted(false);
+    setViolationCount(0);
+    setTimer('');
+    setSnapshotErrors({});
+    setIsStartingExam(false);
+    setShowPermissionsModal(false);
+    setShowRulesModal(false);
+    setShowProfileMenu(false);
+    try {
+      await window.athena?.stopTimerOnMain?.();
+    } catch (error) {
+      console.error("Failed to stop exam timer:", error);
+    }
   }
 
   // Get user initials for avatar
@@ -561,12 +605,7 @@ function App() {
                   </button>
                   <button
                     style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '6px' }}
-                    onClick={() => {
-                      localStorage.removeItem('athena_studentName');
-                      localStorage.removeItem('athena_studentId');
-                      setIsLoggedIn(false);
-                      setShowProfileMenu(false);
-                    }}
+                    onClick={handleSwitchUser}
                   >
                     Switch User
                   </button>
